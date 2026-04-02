@@ -1,10 +1,11 @@
 from sqlalchemy import Column, Integer, String
 from database import Base
 
-class Warehouse(Base):
-    __tablename__ = "warehouses"
+class Material(Base):
+    __tablename__ = "materials"
 
     id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)
-    type = Column(String, nullable=False)  # principal | obra
-    location = Column(String)
+    unit = Column(String)
+    description = Column(String)
