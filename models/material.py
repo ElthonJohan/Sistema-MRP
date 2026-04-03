@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.orm import relationship
 from database import Base
 
 class Material(Base):
@@ -9,3 +10,5 @@ class Material(Base):
     name = Column(String, nullable=False)
     unit = Column(String)
     description = Column(String)
+    
+    movements = relationship("Movement", back_populates="material")

@@ -1,4 +1,7 @@
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, String
+from sqlalchemy.orm import relationship
+from models.requirement import Requirement
+
 from datetime import datetime
 from database import Base
 
@@ -12,7 +15,10 @@ class Dispatch(Base):
     user_id = Column(Integer)
     guia_number = Column(String)
 
+    items = relationship("DispatchItem", backref="dispatch")
+    requirement = relationship("Requirement", back_populates="dispatches")
 
+    receipt = relationship("Receipt", back_populates="dispatch", uselist=False)
 class DispatchItem(Base):
     __tablename__ = "dispatch_items"
 

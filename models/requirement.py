@@ -14,7 +14,7 @@ class Requirement(Base):
     notes = Column(String)
 
     items = relationship("RequirementItem", back_populates="requirement")
-
+    dispatches = relationship("Dispatch", back_populates="requirement")
 
 class RequirementItem(Base):
     __tablename__ = "requirement_items"

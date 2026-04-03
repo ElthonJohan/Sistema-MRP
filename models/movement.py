@@ -1,3 +1,4 @@
+from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from datetime import datetime
 from database import Base
@@ -18,3 +19,6 @@ class Movement(Base):
 
     user_id = Column(Integer)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    
+    warehouse = relationship("Warehouse", back_populates="movements")
+    material = relationship("Material", back_populates="movements")

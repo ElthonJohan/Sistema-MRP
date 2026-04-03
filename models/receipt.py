@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, Boolean
+from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
@@ -11,7 +12,9 @@ class Receipt(Base):
     receipt_date = Column(DateTime, default=datetime.utcnow)
     user_id = Column(Integer)
 
-
+    items = relationship("ReceiptItem", backref="receipt")
+    dispatch = relationship("Dispatch", back_populates="receipt")
+    
 class ReceiptItem(Base):
     __tablename__ = "receipt_items"
 
