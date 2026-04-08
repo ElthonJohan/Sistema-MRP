@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from models.inventory import Inventory
 from models.requirement import Requirement
 from models.movement import Movement
+from models.warehouse import Warehouse
 from datetime import datetime, date
 
 
@@ -13,10 +14,13 @@ def get_kpis(db: Session):
     ).all()
 
     total_stock = sum([s[0] for s in total_stock])
-
-    critical = db.query(Inventory).filter(
-        Inventory.stock <= 5
-    ).count()
+    
+    critical = (
+        db.query(Inventory)
+        .join(Inventory.warehouse)   # haces el JOIN con Warehouse
+        .filter(Warehouse.type == "principal", Inventory.stock <= 5)
+        .count()
+    )
 
     pending_req = db.query(Requirement).filter(
         Requirement.status.in_(["pending", "partial"])
