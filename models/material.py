@@ -12,3 +12,4 @@ class Material(Base):
     description = Column(String)
     
     movements = relationship("Movement", back_populates="material")
+    inventory = relationship("Inventory", back_populates="material")

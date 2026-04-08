@@ -11,3 +11,4 @@ class Warehouse(Base):
     location = Column(String)
     
     movements = relationship("Movement", back_populates="warehouse")
+    inventory = relationship("Inventory", back_populates="warehouse")

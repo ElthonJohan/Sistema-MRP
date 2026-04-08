@@ -15,6 +15,6 @@ class Inventory(Base):
     reserved = Column(Integer, default=0)
 
     last_updated = Column(DateTime, default=datetime.utcnow)
-
-    warehouse = relationship("Warehouse")
-    material = relationship("Material")
+    
+    warehouse = relationship("Warehouse", back_populates="inventory")
+    material = relationship("Material", back_populates="inventory")
