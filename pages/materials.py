@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import time
 from database import SessionLocal
 from services.material_service import (
     create_material,
@@ -30,6 +31,8 @@ with st.form("create_material"):
             created, info = create_material(db, code, name, unit, description)
             if created:
                 st.success("Material creado correctamente")
+                time.sleep(2)
+                st.rerun()
             else:
                 if info == 'code':
                     st.error("El código ya existe")
@@ -37,8 +40,12 @@ with st.form("create_material"):
                     st.error("El nombre ya existe")
                 else:
                     st.error("Error al crear el material")
+                time.sleep(2)
+                st.rerun()  
         else:
             st.error("Código y nombre son obligatorios")
+            time.sleep(2)
+            st.rerun()
 
 # -------------------------
 # LISTAR MATERIALES
@@ -93,9 +100,8 @@ if materials:
         [m.name for m in materials]
     )
     
-    selected_id = next((m.id for m in materials if m.name == select), None)
 
-    selected = next((m for m in materials if m.id == selected_id), None)
+    selected = next((m for m in materials if m.name == select), None)
 
     if selected:
         new_code = st.text_input("Código", value=selected.code)
@@ -104,24 +110,38 @@ if materials:
         new_description = st.text_area("Descripción", value=selected.description)
 
         if st.button("Actualizar"):
-            updated, info = update_material(
-                db,
-                selected.id,
-                new_code,
-                new_name,
-                new_unit,
-                new_description
-            )
+            
+            if new_code and new_name:
+                updated, info = update_material(
+                    db,
+                    selected.id,
+                    new_code,
+                    new_name,
+                    new_unit,
+                    new_description
+                )
 
-            if updated:
-                st.success("Material actualizado correctamente")
-                st.rerun()
-            else:
-                if info == 'code':
-                    st.error("El código ya está en uso")
-                elif info == 'name':
-                    st.error("El nombre ya está en uso")
+                if updated:
+                    st.success("Material actualizado correctamente")
+                    time.sleep(2)
+                    st.rerun()
                 else:
-                    st.error("Error al actualizar el material")
+                    if info == 'code':
+                        st.error("El código ya está en uso")
+                    elif info == 'name':
+                        st.error("El nombre ya está en uso")
+                    else:
+                        st.error("Error al actualizar el material")
+                    time.sleep(2)
+                    st.rerun()
+                        
+            else:
+                st.error("Código y nombre son obligatorios")
+                time.sleep(2)
+                st.rerun()
+
 else:
     st.info("No hay materiales registrados")
+    st.write("Agrega un nuevo material usando el formulario de arriba.")
+    time.sleep(2)
+    st.rerun()
