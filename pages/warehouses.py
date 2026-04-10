@@ -6,6 +6,7 @@ from services.warehouse_service import (
     delete_warehouse,
     update_warehouse
 )
+import time
 
 st.title("🏭 Gestión de Almacenes")
 
@@ -24,11 +25,21 @@ with st.form("create_form"):
     submit = st.form_submit_button("Crear")
 
     if submit:
+        mensaje_container = st.empty()  # Contenedor para el mensaje
+        
         if name:
-            create_warehouse(db, name, type, location)
-            st.success("Almacén creado correctamente")
+            create=create_warehouse(db, name, type, location)
+            if "error" in create:
+                mensaje_container.error(create["error"])
+            else:
+                mensaje_container.success("Almacén creado correctamente")
         else:
-            st.error("El nombre es obligatorio")
+            mensaje_container.error("El nombre es obligatorio")
+
+         # Esperar 2 segundos y luego limpiar
+        time.sleep(2)
+        mensaje_container.empty() 
+        st.rerun()
 
 # -------------------------
 # LISTAR ALMACENES
@@ -54,12 +65,12 @@ for w in warehouses:
 # -------------------------
 st.subheader("✏️ Editar Almacén")
 
-selected_id = st.selectbox(
+selected_name = st.selectbox(
     "Selecciona un almacén",
-    [w.id for w in warehouses]
+    [w.name for w in warehouses]
 )
 
-selected = next((w for w in warehouses if w.id == selected_id), None)
+selected = next((w for w in warehouses if w.name == selected_name), None)
 
 if selected:
     new_name = st.text_input("Nombre", value=selected.name)
@@ -71,6 +82,17 @@ if selected:
     new_location = st.text_input("Ubicación", value=selected.location)
 
     if st.button("Actualizar"):
-        update_warehouse(db, selected.id, new_name, new_type, new_location)
-        st.success("Actualizado correctamente")
+        accept=update_warehouse(db, selected.id, new_name, new_type, new_location)
+        
+        # Crear un contenedor para el mensaje
+        mensaje_container = st.empty()
+        
+        if "error" in accept:
+            mensaje_container.error(accept["error"])
+        else:
+            mensaje_container.success(accept["value"])
+        
+        # Esperar 2 segundos y luego limpiar
+        time.sleep(2)
+        mensaje_container.empty()
         st.rerun()
