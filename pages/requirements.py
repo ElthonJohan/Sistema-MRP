@@ -25,20 +25,24 @@ items = []
 
 num_items = st.number_input("Cantidad de materiales", min_value=1, step=1)
 
-for i in range(num_items):
-    st.write(f"Material {i+1}")
-    mat = st.selectbox(f"Material {i}", list(mat_dict.keys()), key=f"mat_{i}")
-    qty = st.number_input(f"Cantidad {i}", min_value=1, key=f"qty_{i}")
+if mat_dict: 
+    for i in range(num_items):
+        st.write(f"Material {i+1}")
+        mat = st.selectbox(f"Material {i}", list(mat_dict.keys()), key=f"mat_{i}")
+        qty = st.number_input(f"Cantidad {i}", min_value=1, key=f"qty_{i}")
 
-    items.append({
-        "material_id": mat_dict[mat],
-        "qty": qty
-    })
+        items.append({
+            "material_id": mat_dict[mat],
+            "qty": qty
+        })
+    if st.button("Crear Requerimiento"):
+        create_requirement(db, wh_dict[selected_wh], items)
+        st.success("Requerimiento creado")
+        st.rerun()
+else:
+    st.warning("No hay materiales disponibles para seleccionar")
 
-if st.button("Crear Requerimiento"):
-    create_requirement(db, wh_dict[selected_wh], items)
-    st.success("Requerimiento creado")
-    st.rerun()
+
     
 st.subheader("📋 Lista de Requerimientos")
 

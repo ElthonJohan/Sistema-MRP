@@ -48,11 +48,11 @@ for m in movs:
     if m.movement_type == 'IN':
         st.success(f"{m.timestamp} | "
         f"Almacén: {m.warehouse.name} | "
-        f"Material: {m.material.name} | "
+        f"Material: {m.material.name if m.material else "Sin material"} | "
         f"{m.movement_type} {m.qty_change}")
     else:
         st.error(f"{m.timestamp} | "
         f"Almacén: {m.warehouse.name} | "
-        f"Material: {m.material.name} | "
+        f"Material: {m.material.name if m.material else "Sin material"} | "
         f"{m.movement_type} {m.qty_change}")
     

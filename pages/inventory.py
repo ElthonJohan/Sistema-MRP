@@ -21,11 +21,11 @@ materials = db.query(Material).all()
 warehouse_dict = {w.name: w.id for w in warehouses}
 material_dict = {m.name: m.id for m in materials}
 
-selected_wh = st.selectbox("Almacén", list(warehouse_dict.keys()))
-selected_mat = st.selectbox("Material", list(material_dict.keys()))
+selected_wh = st.selectbox("Almacén", list(warehouse_dict.keys()) if warehouse_dict else ["No hay almacenes"])
+selected_mat = st.selectbox("Material", list(material_dict.keys()) if material_dict else ["No hay materiales"])
 
-warehouse_id = warehouse_dict[selected_wh]
-material_id = material_dict[selected_mat]
+warehouse_id = warehouse_dict[selected_wh] if selected_wh in warehouse_dict else None
+material_id = material_dict[selected_mat] if selected_mat in material_dict else None
 
 # -------------------------
 # ENTRADA
@@ -66,7 +66,7 @@ inventory = get_inventory(db)
 for inv in inventory:
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.write(inv.warehouse.name)
-    col2.write(inv.material.name)
+    col1.write(inv.warehouse.name if inv.warehouse else "Sin almacén")
+    col2.write(inv.material.name if inv.material else "Sin material")
     col3.write(f"Stock: {inv.stock}")
     col4.write(f"Reservado: {inv.reserved}")
