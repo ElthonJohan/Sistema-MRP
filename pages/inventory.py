@@ -7,6 +7,17 @@ from services.inventory_service import (
 )
 from models.warehouse import Warehouse
 from models.material import Material
+from utils.auth import require_login
+from utils.navbar import render_navbar, render_sidebar_menu
+
+st.set_page_config(page_title="Inventario - MRP System", layout="wide")
+
+require_login()
+
+# Render navbar
+render_navbar()
+with st.sidebar:
+    render_sidebar_menu()
 
 st.title("📊 Gestión de Inventario")
 
@@ -18,14 +29,22 @@ db = SessionLocal()
 warehouses = db.query(Warehouse).all()
 materials = db.query(Material).all()
 
+if not warehouses:
+    st.error("No hay almacenes configurados. Por favor crea uno primero.")
+    st.stop()
+
+if not materials:
+    st.error("No hay materiales configurados. Por favor crea uno primero.")
+    st.stop()
+
 warehouse_dict = {w.name: w.id for w in warehouses}
 material_dict = {m.name: m.id for m in materials}
 
-selected_wh = st.selectbox("Almacén", list(warehouse_dict.keys()) if warehouse_dict else ["No hay almacenes"])
-selected_mat = st.selectbox("Material", list(material_dict.keys()) if material_dict else ["No hay materiales"])
+selected_wh = st.selectbox("Almacén", list(warehouse_dict.keys()))
+selected_mat = st.selectbox("Material", list(material_dict.keys()))
 
-warehouse_id = warehouse_dict[selected_wh] if selected_wh in warehouse_dict else None
-material_id = material_dict[selected_mat] if selected_mat in material_dict else None
+warehouse_id = warehouse_dict[selected_wh]
+material_id = material_dict[selected_mat]
 
 # -------------------------
 # ENTRADA
@@ -66,7 +85,7 @@ inventory = get_inventory(db)
 for inv in inventory:
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.write(inv.warehouse.name if inv.warehouse else "Sin almacén")
-    col2.write(inv.material.name if inv.material else "Sin material")
+    col1.write(inv.warehouse.name)
+    col2.write(inv.material.name)
     col3.write(f"Stock: {inv.stock}")
     col4.write(f"Reservado: {inv.reserved}")

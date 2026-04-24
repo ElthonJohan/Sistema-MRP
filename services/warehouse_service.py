@@ -23,8 +23,10 @@ def create_warehouse(db: Session, name, type, location):
 def get_warehouses(db: Session):
     return db.query(Warehouse).all()
 
+
 def get_warehouse(db: Session, warehouse_id):
     return db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
+
 
 # Eliminar
 def delete_warehouse(db: Session, warehouse_id):
@@ -37,7 +39,7 @@ def delete_warehouse(db: Session, warehouse_id):
 def update_warehouse(db: Session, warehouse_id, name, type, location):
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if warehouse:
-        
+
         exists = db.query(Warehouse).filter(Warehouse.name == name, Warehouse.id != warehouse_id).first()
         
         if exists:
@@ -48,3 +50,4 @@ def update_warehouse(db: Session, warehouse_id, name, type, location):
         warehouse.location = location
         db.commit()
         return {"value": "Almacén actualizado correctamente"}
+

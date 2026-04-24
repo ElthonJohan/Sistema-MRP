@@ -7,6 +7,17 @@ from services.warehouse_service import (
     update_warehouse
 )
 import time
+from utils.auth import require_login
+from utils.navbar import render_navbar, render_sidebar_menu
+
+st.set_page_config(page_title="Almacenes - MRP System", layout="wide")
+
+require_login()
+
+# Render navbar
+render_navbar()
+with st.sidebar:
+    render_sidebar_menu()
 
 st.title("🏭 Gestión de Almacenes")
 
@@ -40,6 +51,7 @@ with st.form("create_form"):
         time.sleep(2)
         mensaje_container.empty() 
         st.rerun()
+
 
 # -------------------------
 # LISTAR ALMACENES

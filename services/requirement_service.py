@@ -25,6 +25,12 @@ def create_requirement(db: Session, warehouse_id, items):
     all_fulfilled = True
     
     principal_id = db.query(Warehouse).filter(Warehouse.type == "principal").first().id
+    principal_warehouse = db.query(Warehouse).filter(Warehouse.type == "principal").first()
+    
+    if not principal_warehouse:
+        return False, "No hay almacén principal configurado. Por favor crea uno primero."
+    
+    principal_id = principal_warehouse.id
 
     for item in items:
         material_id = item["material_id"]
@@ -56,7 +62,8 @@ def create_requirement(db: Session, warehouse_id, items):
         requirement.status = "partial"
 
     db.commit()
-    return requirement
+
+    return True, "Requerimiento creado exitosamente"
 
 def get_requirements(db: Session):
     return db.query(Requirement).all()
