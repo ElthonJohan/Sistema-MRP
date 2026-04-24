@@ -58,11 +58,10 @@ with st.form("create_material"):
                 st.rerun()  
         else:
             st.error("Código y nombre son obligatorios")
-            #st.session_state["refresh"] = True
             time.sleep(2)
+            #st.session_state["refresh"] = True
             st.rerun()
-    else:
-        st.error("Código y nombre son obligatorios")
+   
 
 # -------------------------
 # LISTAR MATERIALES
@@ -119,41 +118,6 @@ if not to_delete.empty:
         st.success("Materiales eliminados correctamente")
         st.session_state["refresh"] = True
         #st.rerun()
-        
-#st.dataframe(df, use_container_width=True,hide_index=True)
-
-
-
-# for m in materials:
-#     col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 3, 2])
-
-#     col1.write(m.code)
-#     col2.write(m.name)
-#     col3.write(m.unit)
-#     col4.write(m.description)
-
-#     if col5.button("Eliminar", key=f"del_mat_{m.id}"):
-#         delete_material(db, m.id)
-#         st.rerun()
-st.subheader("Inventario de Materiales")
-
-nuevo_orden = ['code', 'name', 'unit', 'description'] 
-df = df[nuevo_orden]
-st.dataframe(df, use_container_width=True,hide_index=True)
-
-
-
-for m in materials:
-    col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 3, 2])
-
-    col1.write(m.code)
-    col2.write(m.name)
-    col3.write(m.unit)
-    col4.write(m.description)
-
-    if col5.button("Eliminar", key=f"del_mat_{m.id}"):
-        delete_material(db, m.id)
-        st.rerun()
 
 
 # -------------------------
@@ -223,24 +187,4 @@ else:
 if st.session_state.get("refresh"):
     st.session_state["refresh"] = False
     st.rerun()
-    updated, info = update_material(
-        db,
-        selected.id,
-        new_code,
-        new_name,
-        new_unit,
-        new_description
-            )
-
-    if updated:
-        st.success("Material actualizado correctamente")
-        st.rerun()
-    else:
-        if info == 'code':
-            st.error("El código ya está en uso")
-        elif info == 'name':
-            st.error("El nombre ya está en uso")
-        else:
-            st.error("Error al actualizar el material")
-else:
-    st.info("No hay materiales registrados")
+    

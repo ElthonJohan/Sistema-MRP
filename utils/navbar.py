@@ -353,7 +353,7 @@ def render_sidebar_menu():
     (function(){
       var N={
         'Dashboard':'dashboard','Almacenes':'warehouses','Materiales':'materials',
-        'Requerimientos':'requirements','Recibos':'receipts','Despachos':'dispatches',
+        'Requerimientos':'requirements','Recepciones':'receipts','Despachos':'dispatches',
         'Inventario':'inventory','Logs de Acceso':'access_logs','Cerrar sesión':'logout'
       };
       function tag(){
@@ -417,7 +417,7 @@ def render_sidebar_menu():
     _btn("Almacenes",        "pages/warehouses.py",   "menu_warehouses")
     _btn("Materiales",       "pages/materials.py",    "menu_materials")
     _btn("Requerimientos",   "pages/requirements.py", "menu_requirements")
-    _btn("Recibos",          "pages/receipts.py",     "menu_receipts")
+    _btn("Recepciones",      "pages/receipts.py",     "menu_receipts")
     _btn("Despachos",        "pages/dispatches.py",   "menu_dispatches")
     _btn("Inventario",       "pages/inventory.py",    "menu_inventory")
 

@@ -5,7 +5,7 @@ from models.dispatch import Dispatch
 from utils.auth import require_login
 from utils.navbar import render_navbar, render_sidebar_menu
 
-st.set_page_config(page_title="Recibos - MRP System", layout="wide")
+st.set_page_config(page_title="Recepciones - MRP System", layout="wide")
 
 require_login()
 
