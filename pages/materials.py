@@ -6,9 +6,20 @@ from services.material_service import (
     create_material,
     get_materials,
     delete_material,
-    delete_material_code,
-    update_material
+    update_material,
+    delete_material_code
 )
+from utils.auth import require_login
+from utils.navbar import render_navbar, render_sidebar_menu
+
+st.set_page_config(page_title="Materiales - MRP System", layout="wide")
+
+require_login()
+
+# Render navbar
+render_navbar()
+with st.sidebar:
+    render_sidebar_menu()
 
 st.title("📦 Gestión de Materiales")
 
@@ -47,9 +58,10 @@ with st.form("create_material"):
                 st.rerun()  
         else:
             st.error("Código y nombre son obligatorios")
-            #st.session_state["refresh"] = True
             time.sleep(2)
+            #st.session_state["refresh"] = True
             st.rerun()
+   
 
 # -------------------------
 # LISTAR MATERIALES
@@ -106,22 +118,6 @@ if not to_delete.empty:
         st.success("Materiales eliminados correctamente")
         st.session_state["refresh"] = True
         #st.rerun()
-        
-#st.dataframe(df, use_container_width=True,hide_index=True)
-
-
-
-# for m in materials:
-#     col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 3, 2])
-
-#     col1.write(m.code)
-#     col2.write(m.name)
-#     col3.write(m.unit)
-#     col4.write(m.description)
-
-#     if col5.button("Eliminar", key=f"del_mat_{m.id}"):
-#         delete_material(db, m.id)
-#         st.rerun()
 
 
 # -------------------------
@@ -132,11 +128,13 @@ st.subheader("✏️ Editar Material")
 if materials:
     select = st.selectbox(
         "Selecciona un material",
-        [m.id for m in materials]
+
+        [m.name for m in materials]
     )
     
+    selected_id = next((m.id for m in materials if m.name == select), None)
 
-    selected = next((m for m in materials if m.id == select), None)
+    selected = next((m for m in materials if m.id == selected_id), None)
 
     if selected:
         new_code = st.text_input("Código", value=selected.code)
@@ -189,3 +187,4 @@ else:
 if st.session_state.get("refresh"):
     st.session_state["refresh"] = False
     st.rerun()
+    

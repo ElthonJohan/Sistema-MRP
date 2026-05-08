@@ -7,6 +7,17 @@ from services.warehouse_service import (
     update_warehouse
 )
 import time
+from utils.auth import require_login
+from utils.navbar import render_navbar, render_sidebar_menu
+
+st.set_page_config(page_title="Almacenes - MRP System", layout="wide")
+
+require_login()
+
+# Render navbar
+render_navbar()
+with st.sidebar:
+    render_sidebar_menu()
 
 st.title("🏭 Gestión de Almacenes")
 
@@ -41,6 +52,7 @@ with st.form("create_form"):
         mensaje_container.empty() 
         st.rerun()
 
+
 # -------------------------
 # LISTAR ALMACENES
 # -------------------------
@@ -65,34 +77,39 @@ for w in warehouses:
 # -------------------------
 st.subheader("✏️ Editar Almacén")
 
-selected_name = st.selectbox(
-    "Selecciona un almacén",
-    [w.name for w in warehouses]
-)
+if warehouses:
 
-selected = next((w for w in warehouses if w.name == selected_name), None)
-
-if selected:
-    new_name = st.text_input("Nombre", value=selected.name)
-    new_type = st.selectbox(
-        "Tipo",
-        ["principal", "obra"],
-        index=0 if selected.type == "principal" else 1
+    selected_name = st.selectbox(
+        "Selecciona un almacén",
+        [w.name for w in warehouses]
     )
-    new_location = st.text_input("Ubicación", value=selected.location)
 
-    if st.button("Actualizar"):
-        accept=update_warehouse(db, selected.id, new_name, new_type, new_location)
-        
-        # Crear un contenedor para el mensaje
-        mensaje_container = st.empty()
-        
-        if "error" in accept:
-            mensaje_container.error(accept["error"])
-        else:
-            mensaje_container.success(accept["value"])
-        
-        # Esperar 2 segundos y luego limpiar
-        time.sleep(2)
-        mensaje_container.empty()
-        st.rerun()
+    selected = next((w for w in warehouses if w.name == selected_name), None)
+
+    if selected:
+        new_name = st.text_input("Nombre", value=selected.name)
+        new_type = st.selectbox(
+            "Tipo",
+            ["principal", "obra"],
+            index=0 if selected.type == "principal" else 1
+        )
+        new_location = st.text_input("Ubicación", value=selected.location)
+
+        if st.button("Actualizar"):
+            accept=update_warehouse(db, selected.id, new_name, new_type, new_location)
+            
+            # Crear un contenedor para el mensaje
+            mensaje_container = st.empty()
+            
+            if "error" in accept:
+                mensaje_container.error(accept["error"])
+            else:
+                mensaje_container.success(accept["value"])
+            
+            # Esperar 2 segundos y luego limpiar
+            time.sleep(2)
+            mensaje_container.empty()
+            st.rerun()
+else:
+    st.info("No hay almacenes registrados. Por favor, crea uno primero.")
+    st.write("Para crear un almacén, completa el formulario en la sección '➕ Crear Almacén' y haz clic en 'Crear'.")

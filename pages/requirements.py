@@ -3,6 +3,18 @@ from database import SessionLocal
 from services.requirement_service import create_requirement, get_requirements
 from models.warehouse import Warehouse
 from models.material import Material
+from utils.auth import require_login
+from utils.navbar import render_navbar, render_sidebar_menu
+
+st.set_page_config(page_title="Requerimientos - MRP System", layout="wide")
+
+require_login()
+
+# Render navbar
+render_navbar()
+with st.sidebar:
+    render_sidebar_menu()
+
 
 st.title("📋 Requerimientos")
 
@@ -16,6 +28,16 @@ st.subheader("➕ Nuevo Requerimiento")
 warehouses = db.query(Warehouse).filter(Warehouse.type == "obra").all()
 materials = db.query(Material).all()
 
+
+if not warehouses:
+    st.error("No hay almacenes de obra configurados. Por favor crea uno primero.")
+    st.stop()
+
+if not materials:
+    st.error("No hay materiales configurados. Por favor crea uno primero.")
+    st.stop()
+
+
 wh_dict = {w.name: w.id for w in warehouses}
 mat_dict = {m.name: m.id for m in materials}
 
@@ -24,6 +46,7 @@ selected_wh = st.selectbox("Almacén de obra", list(wh_dict.keys()))
 items = []
 
 num_items = st.number_input("Cantidad de materiales", min_value=1, step=1)
+
 
 if mat_dict: 
     for i in range(num_items):
@@ -36,11 +59,15 @@ if mat_dict:
             "qty": qty
         })
     if st.button("Crear Requerimiento"):
-        create_requirement(db, wh_dict[selected_wh], items)
-        st.success("Requerimiento creado")
+        success, msg = create_requirement(db, wh_dict[selected_wh], items)
+    if success:
+        st.success(msg)
         st.rerun()
+    else:
+        st.error(msg)
 else:
     st.warning("No hay materiales disponibles para seleccionar")
+
 
 
     

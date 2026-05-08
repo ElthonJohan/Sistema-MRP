@@ -5,3 +5,6 @@ from .requirement import Requirement, RequirementItem
 from .dispatch import Dispatch, DispatchItem
 from .receipt import Receipt, ReceiptItem
 from .movement import Movement
+from .user import User
+from .login_log import LoginLog
+from .failed_login import FailedLoginAttempt
