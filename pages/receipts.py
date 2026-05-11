@@ -55,12 +55,12 @@ if dispatch and dispatch.items:
     if st.button("Confirmar Recepción"):
         success, msg = create_receipt(db, dispatch_id)
 
-    if success:
-        st.success(msg)
-        st.rerun()
-    else:
+        if success:
+            st.success(msg)
+            st.rerun()
+        else:
 
-        st.error(msg)
+            st.error(msg)
 else:
     st.info("No hay materiales despachados para este despacho o el despacho no existe.")
 

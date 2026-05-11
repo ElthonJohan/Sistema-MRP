@@ -65,8 +65,45 @@ def create_requirement(db: Session, warehouse_id, items):
 
     return True, "Requerimiento creado exitosamente"
 
-def get_requirements(db: Session):
-    return db.query(Requirement).all()
+def get_requirements(db: Session, skip: int = 0, limit: int = 10, 
+                    requirement_id: int = None, status: str = None, 
+                    start_date = None, end_date = None):
+    """
+    Obtiene requerimientos con filtros y paginación
+    
+    Args:
+        skip: Número de registros a saltar (paginación)
+        limit: Número máximo de registros a retornar
+        requirement_id: Filtrar por ID de requerimiento
+        status: Filtrar por estado (pending, fulfilled, partial, cancelled)
+        start_date: Filtrar desde esta fecha
+        end_date: Filtrar hasta esta fecha
+    """
+    query = db.query(Requirement)
+    
+    # Aplicar filtros
+    if requirement_id:
+        query = query.filter(Requirement.id == requirement_id)
+    
+    if status:
+        query = query.filter(Requirement.status == status)
+    
+    if start_date:
+        query = query.filter(Requirement.created_at >= start_date)
+    
+    if end_date:
+        query = query.filter(Requirement.created_at <= end_date)
+    
+    # Ordenar por fecha descendente
+    query = query.order_by(Requirement.created_at.desc())
+    
+    # Obtener total de registros antes de paginar
+    total_count = query.count()
+    
+    # Aplicar paginación
+    requirements = query.offset(skip).limit(limit).all()
+    
+    return requirements, total_count
 
 def get_requirement_detail(db: Session, requirement_id):
     return db.query(Requirement).filter(

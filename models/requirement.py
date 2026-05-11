@@ -22,6 +22,7 @@ class RequirementItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     requirement_id = Column(Integer, ForeignKey("requirements.id"))
     material_id = Column(Integer, ForeignKey("materials.id"))
+    material=relationship("Material")
 
     requested_qty = Column(Integer)
     fulfilled_qty = Column(Integer, default=0)
