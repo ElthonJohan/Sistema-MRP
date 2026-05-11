@@ -6,7 +6,7 @@ toolbarMode = "minimal"
 level = "error"
 
 [ui]
-hideTopBar = false
+hideTopBar = true
 hideSidebar = false
 
 [theme]
