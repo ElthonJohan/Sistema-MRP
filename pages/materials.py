@@ -6,6 +6,7 @@ from services.material_service import (
     create_material,
     get_materials,
     delete_material,
+    get_materials_filtered,
     update_material,
     delete_material_code
 )
@@ -63,63 +64,7 @@ with st.form("create_material"):
             st.rerun()
    
 
-# -------------------------
-# LISTAR MATERIALES
-# -------------------------
-st.subheader("📋 Lista de Materiales")
-
 materials = get_materials(db)
-
-
-# 2. Convertir la lista de objetos a una lista de diccionarios
-# Usamos __dict__ para extraer los datos de cada objeto automáticamente
-data = [m.__dict__ for m in materials]
-
-# 3. Crear el DataFrame
-df = pd.DataFrame(data)
-
-# 4. Limpieza (Importante)
-# Si usas SQLAlchemy, elimina la columna interna '_sa_instance_state' para que no se vea
-if '_sa_instance_state' in df.columns:
-    df = df.drop(columns=['_sa_instance_state'])
-
-# 5. Mostrar en Streamlit
-nuevo_orden = ['code', 'name', 'unit', 'description'] 
-
-# Crear columnas faltantes con valores None
-for col in nuevo_orden:
-    if col not in df.columns:
-        df[col] = None
-
-# Reordenar columnas      
-df = df[nuevo_orden]
-
-# Agregamos columna para marcar eliminación
-df["Eliminar"] = False
-
-# Mostrar editor interactivo
-edited_df = st.data_editor(
-    df,
-    width="stretch",
-    hide_index=True,
-    num_rows="fixed"
-)
-
-# Procesar eliminaciones
-to_delete = edited_df[edited_df["Eliminar"] == True]
-
-if not to_delete.empty:
-    st.warning("Se eliminarán los siguientes materiales:")
-    st.write(to_delete[nuevo_orden + ["Eliminar"]])
-    
-    if st.button("Confirmar eliminación"):
-        for _, row in to_delete.iterrows():
-            delete_material_code(db, row["code"])
-        st.success("Materiales eliminados correctamente")
-        st.session_state["refresh"] = True
-        #st.rerun()
-
-
 # -------------------------
 # EDITAR MATERIAL
 # -------------------------
@@ -181,6 +126,133 @@ else:
     st.write("Agrega un nuevo material usando el formulario de arriba.")
     
     
+# -------------------------
+# LISTAR MATERIALES
+# -------------------------
+st.subheader("📋 Lista de Materiales")
+
+# Inicializar estado de paginación
+if "page" not in st.session_state:
+    st.session_state.page = 0
+if "filters_applied" not in st.session_state:
+    st.session_state.filters_applied = False
+
+# SECTION: FILTROS
+with st.expander("🔍 Filtros", expanded=True):
+    col1, col2,col3 = st.columns(3)
+    
+    with col1:
+        code_filter = st.text_input("Filtrar por código", value="")
+    
+    with col2:
+        name_filter = st.text_input("Filtrar por nombre", value="")
+    
+    with col3:
+        unit_filter = st.text_input("Filtrar por unidad", value="")
+
+    col_search, col_clear = st.columns([1, 1])
+
+    with col_search:
+        if st.button("🔎 Buscar", use_container_width=True):
+            st.session_state.page = 0
+            st.session_state.filters_applied = True
+    
+    with col_clear:
+        if st.button("🔄 Limpiar Filtros", use_container_width=True):
+            # code_filter = ""
+            # name_filter = ""
+            st.session_state.page = 0
+            st.session_state.filters_applied = False
+            st.rerun()
+
+
+# SECTION: OBTENER DATOS CON FILTROS
+items_per_page = 10
+
+# Aplicar filtros
+filter_code_val = code_filter if code_filter else None
+filter_name_val = name_filter if name_filter else None
+filter_unit_val = unit_filter if unit_filter else None
+
+materials, total_count = get_materials_filtered(
+    db,
+    skip=st.session_state.page * items_per_page,  
+    limit=items_per_page,
+    code_filter=filter_code_val,
+    name_filter=filter_name_val,
+    unit_filter=filter_unit_val
+)
+
+# Mostrar información de paginación
+st.info(f"📊 Total de materiales: **{total_count}** | Mostrando: **{len(materials)}** | Página: **{st.session_state.page + 1}**")  
+
+# SECTION: MOSTRAR MATERIALES
+if materials:
+    df = pd.DataFrame([m.__dict__ for m in materials])
+    if '_sa_instance_state' in df.columns:
+        df = df.drop(columns=['_sa_instance_state'])
+    st.dataframe(df[["code", "name", "unit", "description"]])
+else:
+    st.info("No hay materiales registrados")
+    st.write("Agrega un nuevo material usando el formulario de arriba.")
+    
+
+
+
+
+
+# 
+
+
+# # 2. Convertir la lista de objetos a una lista de diccionarios
+# # Usamos __dict__ para extraer los datos de cada objeto automáticamente
+# data = [m.__dict__ for m in materials]
+
+# # 3. Crear el DataFrame
+# df = pd.DataFrame(data)
+
+# # 4. Limpieza (Importante)
+# # Si usas SQLAlchemy, elimina la columna interna '_sa_instance_state' para que no se vea
+# if '_sa_instance_state' in df.columns:
+#     df = df.drop(columns=['_sa_instance_state'])
+
+# # 5. Mostrar en Streamlit
+# nuevo_orden = ['code', 'name', 'unit', 'description'] 
+
+# # Crear columnas faltantes con valores None
+# for col in nuevo_orden:
+#     if col not in df.columns:
+#         df[col] = None
+
+# # Reordenar columnas      
+# df = df[nuevo_orden]
+
+# # Agregamos columna para marcar eliminación
+# df["Eliminar"] = False
+
+# # Mostrar editor interactivo
+# edited_df = st.data_editor(
+#     df,
+#     width="stretch",
+#     hide_index=True,
+#     num_rows="fixed"
+# )
+
+# # Procesar eliminaciones
+# to_delete = edited_df[edited_df["Eliminar"] == True]
+
+# if not to_delete.empty:
+#     st.warning("Se eliminarán los siguientes materiales:")
+#     st.write(to_delete[nuevo_orden + ["Eliminar"]])
+    
+#     if st.button("Confirmar eliminación"):
+#         for _, row in to_delete.iterrows():
+#             delete_material_code(db, row["code"])
+#         st.success("Materiales eliminados correctamente")
+#         st.session_state["refresh"] = True
+#         #st.rerun()
+
+
 # -------------------------
 # REFRESCAR AUTOMÁTICAMENTE
 # -------------------------

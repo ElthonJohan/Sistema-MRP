@@ -28,6 +28,26 @@ def create_material(db: Session, code, name, unit, description):
 def get_materials(db: Session):
     return db.query(Material).all()
 
+def get_materials_filtered(db: Session, skip: int=0, limit:int =10,
+                           code_filter: str = None, name_filter: str = None, unit_filter: str = None):
+    query = db.query(Material)
+
+    if code_filter:
+        query = query.filter(Material.code.ilike(f"%{code_filter}%"))
+    if name_filter:
+        query = query.filter(Material.name.ilike(f"%{name_filter}%"))
+    if unit_filter:
+        query = query.filter(Material.unit.ilike(f"%{unit_filter}%"))
+
+    #Obtener total de materiales antes de paginar
+    total_count = query.count()
+
+    #Aplicar paginación
+    materials = query.offset(skip).limit(limit).all()
+
+
+    return materials, total_count
+
 # Eliminar
 def delete_material(db: Session, material_id):
     material = db.query(Material).filter(Material.id == material_id).first()
