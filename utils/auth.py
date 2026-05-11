@@ -27,6 +27,7 @@ def get_current_username():
     return st.session_state.username
 
 def logout():
-    """Logout: elimina sesión en DB, borra cookie y navega al login vía JS."""
     from utils.session_manager import logout_session
     logout_session()  # logout_session ya llama logout_redirect() con st.stop()
+    
+

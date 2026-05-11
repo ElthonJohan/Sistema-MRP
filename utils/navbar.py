@@ -385,8 +385,10 @@ def render_sidebar_menu():
           </div>
         </div>
         <div class="sb-brand-text">
+                <a href="/">
           <p class="sb-brand-name">Sistema MRP</p>
           <p class="sb-brand-sub">Gestión de Recursos</p>
+                </a>
         </div>
       </div>
       <div class="sb-user-row">
@@ -430,10 +432,8 @@ def render_sidebar_menu():
 
     # ── Logout ───────────────────────────────────────────────────────────────
     if st.button("Cerrar sesión", use_container_width=True, key="sidebar_logout_btn"):
-        st.session_state.logged_in = False
-        st.session_state.user_id   = None
-        st.session_state.username  = None
-        st.switch_page("pages/login.py")
+        from utils.auth import logout
+        logout()
 
     # ── Footer ───────────────────────────────────────────────────────────────
     st.markdown(

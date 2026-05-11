@@ -23,8 +23,8 @@ from services.session_service import (
 )
 
 COOKIE_NAME = "mrp_session_token"
-_DASHBOARD_PATH = "/pages/dashboard"
-_LOGIN_PATH = "/pages/login"
+_DASHBOARD_PATH = "/dashboard"
+_LOGIN_PATH = "/login"
 
 
 def login_redirect(token: str) -> None:
@@ -146,7 +146,8 @@ def logout_session() -> None:
         finally:
             db.close()
     _clear_state()
-    logout_redirect()
+    st.session_state.logged_in = False
+    st.rerun()
 
 
 def _clear_state() -> None:
@@ -162,4 +163,3 @@ def _js_expires(days: int = 1) -> str:
     from datetime import datetime, timedelta, timezone
     dt = datetime.now(timezone.utc) + timedelta(days=days)
     return dt.strftime("%a, %d %b %Y %H:%M:%S GMT")
-
