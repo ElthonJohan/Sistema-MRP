@@ -31,13 +31,21 @@ db = SessionLocal()
 # -------------------------
 st.subheader("➕ Crear Material")
 
-with st.form("create_material"):
-    code = st.text_input("Código")
-    name = st.text_input("Nombre")
-    unit = st.text_input("Unidad (kg, m, unidad, etc.)")
-    description = st.text_area("Descripción")
+with st.expander("⚙️Formulario de creación", expanded=True):
+    col1, col2, col3 = st.columns(3)
 
-    submit = st.form_submit_button("Crear")
+    with col1:
+        code = st.text_input("Código")
+    
+    with col2:
+        name = st.text_input("Nombre")
+    with col3:
+        unit = st.text_input("Unidad (kg, m, unidad, etc.)")
+
+    col4 = st.columns(1)[0]
+    with col4:
+        description = st.text_area("Descripción")
+    submit = st.button("✅Crear", use_container_width=True)
 
     if submit:
         if code and name:
@@ -45,7 +53,6 @@ with st.form("create_material"):
             if created:
                 st.success("Material creado correctamente")
                 time.sleep(2)
-                #st.session_state["refresh"] = True
                 st.rerun()
             else:
                 if info == 'code':
@@ -54,15 +61,12 @@ with st.form("create_material"):
                     st.error("El nombre ya existe")
                 else:
                     st.error("Error al crear el material")
-                #st.session_state["refresh"] = True
                 time.sleep(2)
                 st.rerun()  
         else:
             st.error("Código y nombre son obligatorios")
             time.sleep(2)
-            #st.session_state["refresh"] = True
             st.rerun()
-   
 
 materials = get_materials(db)
 # -------------------------
@@ -70,61 +74,69 @@ materials = get_materials(db)
 # -------------------------
 st.subheader("✏️ Editar Material")
 
-if materials:
-    select = st.selectbox(
+with st.expander("⚙️Formulario de edición", expanded=True):
+    
+    if materials:
+
+        select = st.selectbox(
         "Selecciona un material",
+        [m.name for m in materials])
+        
+            # Obtener el ID del material seleccionado
+        selected_id = next((m.id for m in materials if m.name == select), None)
 
-        [m.name for m in materials]
-    )
-    
-    selected_id = next((m.id for m in materials if m.name == select), None)
+        selected = next((m for m in materials if m.id == selected_id), None)
 
-    selected = next((m for m in materials if m.id == selected_id), None)
+        if selected:
+            col1, col2, col3 = st.columns(3)
 
-    if selected:
-        new_code = st.text_input("Código", value=selected.code)
-        new_name = st.text_input("Nombre", value=selected.name)
-        new_unit = st.text_input("Unidad", value=selected.unit)
-        new_description = st.text_area("Descripción", value=selected.description)
+            with col1:
+                new_code = st.text_input("Código", value=selected.code)
+            with col2:
+                new_name = st.text_input("Nombre", value=selected.name)
+            with col3:
+                new_unit = st.text_input("Unidad (kg, m, unidad, etc.)", value=selected.unit)
+            col4 = st.columns(1)[0]
+            with col4:
+                new_description = st.text_area("Descripción", value=selected.description, key="edit_desc")
+            submit = st.button("✅Actualizar", use_container_width=True)
 
-        if st.button("Actualizar"):
-            
-            if new_code and new_name:
-                updated, info = update_material(
-                    db,
-                    selected.id,
-                    new_code,
-                    new_name,
-                    new_unit,
-                    new_description
-                )
+            if submit:
+                if new_code and new_name:
+                    updated, info = update_material(
+                        db,
+                        selected.id,
+                        new_code,
+                        new_name,
+                        new_unit,
+                        new_description
+                    )
 
-                if updated:
-                    st.success("Material actualizado correctamente")
-                    st.session_state["refresh"] = True
-                    # time.sleep(2)
-                    # st.rerun()
-                else:
-                    if info == 'code':
-                        st.error("El código ya está en uso")
-                    elif info == 'name':
-                        st.error("El nombre ya está en uso")
+                    if updated:
+                        st.success("Material actualizado correctamente")
+                        #st.session_state["refresh"] = True
+                        time.sleep(2)
+                        st.rerun()
                     else:
-                        st.error("Error al actualizar el material")
-                    st.session_state["refresh"] = True
-                    # time.sleep(2)
-                    # st.rerun()
+                        if info == 'code':
+                            st.error("El código ya está en uso")
+                        elif info == 'name':
+                            st.error("El nombre ya está en uso")
+                        else:
+                            st.error("Error al actualizar el material")
+                        #st.session_state["refresh"] = True
+                        time.sleep(2)
+                        st.rerun()
                         
-            else:
-                st.error("Código y nombre son obligatorios")
-                st.session_state["refresh"] = True
-                # time.sleep(2)
-                # st.rerun()
-
-else:
-    st.info("No hay materiales registrados")
-    st.write("Agrega un nuevo material usando el formulario de arriba.")
-    
+                else:
+                    st.error("Código y nombre son obligatorios")
+                    #st.session_state["refresh"] = True
+                    time.sleep(2)
+                    st.rerun()
+    else:
+        st.info("No hay materiales registrados")
+        st.write("Agrega un nuevo material usando el formulario de arriba.")
+        
     
 # -------------------------
 # LISTAR MATERIALES
@@ -142,13 +154,16 @@ with st.expander("🔍 Filtros", expanded=True):
     col1, col2,col3 = st.columns(3)
     
     with col1:
-        code_filter = st.text_input("Filtrar por código", value="", key="m_code")
+        code_filter = st.text_input("Filtrar por código", value="", key="m_code",
+                                    help="Escribe parte del código para filtrar. Deja vacío para no filtrar por código.")
     
     with col2:
-        name_filter = st.text_input("Filtrar por nombre", value="", key="m_name")
+        name_filter = st.text_input("Filtrar por nombre", value="", key="m_name",
+                                    help="Escribe parte del nombre para filtrar. Deja vacío para no filtrar por nombre.")
     
     with col3:
-        unit_filter = st.text_input("Filtrar por unidad", value="", key="m_unit")
+        unit_filter = st.text_input("Filtrar por unidad", value="", key="m_unit",
+                                    help="Escribe parte de la unidad para filtrar. Deja vacío para no filtrar por unidad.")
 
     col_search, col_clear = st.columns([1, 1])
 
