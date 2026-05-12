@@ -182,7 +182,7 @@ if requirements:
         
         st.divider()
 else:
-    st.warning("❌ No se encontraron requerimientos con los filtros aplicados")
+    st.warning("❌ No se encontraron requerimientos con los filtros aplicados" if st.session_state.filters_applied else "No hay requerimientos registrados.")
 
 
 # SECTION: PAGINACIÓN

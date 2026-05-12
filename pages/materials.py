@@ -24,6 +24,24 @@ with st.sidebar:
 
 st.title("📦 Gestión de Materiales")
 
+# Inyectar CSS para personalizar el botón de eliminación (tipo primary)
+st.markdown("""
+<style>
+/* Estilo para el botón de acción destructiva (rojo) */
+div[data-testid="stColumn"] button[data-testid="stBaseButton-primary"] {
+    background-color: #A63C29 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+}
+div[data-testid="stColumn"] button[data-testid="stBaseButton-primary"]:hover {
+    background-color: #7A3427 !important;
+    transform: scale(1.02) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 db = SessionLocal()
 
 # -------------------------
@@ -204,76 +222,52 @@ materials, total_count = get_materials_filtered(
 st.info(f"📊 Total de materiales: **{total_count}** | Mostrando: **{len(materials)}** | Página: **{st.session_state.page + 1}**")  
 
 # SECTION: MOSTRAR MATERIALES
+
 if materials:
-    df = pd.DataFrame([m.__dict__ for m in materials])
-    if '_sa_instance_state' in df.columns:
-        df = df.drop(columns=['_sa_instance_state'])
-    st.dataframe(df[["code", "name", "unit", "description"]])
+    for m in materials:
+        col1, col2, col3, col4 = st.columns([2, 3, 2, 1])
+        with col1:
+            st.write(f"**Código:** {m.code}")
+        with col2:
+            st.write(f"**Nombre:** {m.name}")
+        with col3:
+            st.write(f"**Unidad:** {m.unit}")
+        # BOTÓN ELIMINAR
+        if col4.button(
+            "🗑️ Eliminar", 
+            key=f"del_{m.id}", 
+            type="primary", 
+            use_container_width=True,
+            help="Eliminar este material. Ten en cuenta que esta acción no se puede deshacer."
+        ):
+            
+            delete_material(db, m.id)
+            st.rerun()
+        
+        with st.expander(f"👁️ Ver Detalle - Material #{m.id}"):
+            st.write(f"**Descripción:** {m.description if m.description else 'Sin descripción'}")
+            st.divider()
+        
+
+        
 else:
-    st.info("No hay materiales registrados")
-    st.write("Agrega un nuevo material usando el formulario de arriba.")
-    
+    st.warning("❌ No se encontraron materiales con los filtros aplicados." if st.session_state.filters_applied else "No hay materiales registrados.")
 
 
+# SECTION: PAGINACIÓN
+col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
 
+with col1:
+    if st.session_state.page > 0:
+        if st.button("⬅️ Anterior", use_container_width=True):
+            st.session_state.page -= 1
+            st.rerun()
 
+with col5:
+    if len(materials) == items_per_page and (st.session_state.page + 1) * items_per_page < total_count:
+        if st.button("Siguiente ➡️", use_container_width=True):
+            st.session_state.page += 1
+            st.rerun()
 
-# 
-
-
-# # 2. Convertir la lista de objetos a una lista de diccionarios
-# # Usamos __dict__ para extraer los datos de cada objeto automáticamente
-# data = [m.__dict__ for m in materials]
-
-# # 3. Crear el DataFrame
-# df = pd.DataFrame(data)
-
-# # 4. Limpieza (Importante)
-# # Si usas SQLAlchemy, elimina la columna interna '_sa_instance_state' para que no se vea
-# if '_sa_instance_state' in df.columns:
-#     df = df.drop(columns=['_sa_instance_state'])
-
-# # 5. Mostrar en Streamlit
-# nuevo_orden = ['code', 'name', 'unit', 'description'] 
-
-# # Crear columnas faltantes con valores None
-# for col in nuevo_orden:
-#     if col not in df.columns:
-#         df[col] = None
-
-# # Reordenar columnas      
-# df = df[nuevo_orden]
-
-# # Agregamos columna para marcar eliminación
-# df["Eliminar"] = False
-
-# # Mostrar editor interactivo
-# edited_df = st.data_editor(
-#     df,
-#     width="stretch",
-#     hide_index=True,
-#     num_rows="fixed"
-# )
-
-# # Procesar eliminaciones
-# to_delete = edited_df[edited_df["Eliminar"] == True]
-
-# if not to_delete.empty:
-#     st.warning("Se eliminarán los siguientes materiales:")
-#     st.write(to_delete[nuevo_orden + ["Eliminar"]])
-    
-#     if st.button("Confirmar eliminación"):
-#         for _, row in to_delete.iterrows():
-#             delete_material_code(db, row["code"])
-#         st.success("Materiales eliminados correctamente")
-#         st.session_state["refresh"] = True
-#         #st.rerun()
-
-
-# -------------------------
-# REFRESCAR AUTOMÁTICAMENTE
-# -------------------------
-if st.session_state.get("refresh"):
-    st.session_state["refresh"] = False
-    st.rerun()
-    
+with col3:
+    st.markdown(f"<div style='text-align: center; padding: 10px;'>Página **{st.session_state.page + 1}** de **{(total_count + items_per_page - 1) // items_per_page}**</div>", unsafe_allow_html=True)
