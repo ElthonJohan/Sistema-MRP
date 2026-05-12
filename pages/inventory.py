@@ -72,52 +72,6 @@ with st.expander("⚙️ Configuración de Almacén y Material"):
 
 
 
-# if not warehouses:
-#     st.error("No hay almacenes configurados. Por favor crea uno primero.")
-#     st.stop()
-
-# if not materials:
-#     st.error("No hay materiales configurados. Por favor crea uno primero.")
-#     st.stop()
-
-# warehouse_dict = {w.name: w.id for w in warehouses}
-# material_dict = {m.name: m.id for m in materials}
-
-# selected_wh = st.selectbox("Almacén", list(warehouse_dict.keys()))
-# selected_mat = st.selectbox("Material", list(material_dict.keys()))
-
-# warehouse_id = warehouse_dict[selected_wh]
-# material_id = material_dict[selected_mat]
-
-# # -------------------------
-# # ENTRADA
-# # -------------------------
-# st.subheader("➕ Ingresar Stock")
-
-# qty_in = st.number_input("Cantidad a ingresar", min_value=1)
-
-# if st.button("Agregar Stock"):
-#     add_stock(db, warehouse_id, material_id, qty_in, user_id=1)
-#     st.success("Stock agregado")
-#     st.rerun()
-
-# # -------------------------
-# # SALIDA
-# # -------------------------
-# st.subheader("➖ Retirar Stock")
-
-# qty_out = st.number_input("Cantidad a retirar", min_value=1)
-
-# if st.button("Retirar Stock"):
-#     success = remove_stock(db, warehouse_id, material_id, qty_out, user_id=1)
-
-#     if success:
-#         st.success("Stock retirado")
-#     else:
-#         st.error("Stock insuficiente")
-
-#     st.rerun()
-
 # -------------------------
 # TABLA INVENTARIO
 # -------------------------
@@ -202,3 +156,22 @@ if inventory:
 
 else:
     st.info("❌ No se encontraron registros con los filtros aplicados." if st.session_state.filters_applied else "No hay registros de inventario disponibles.")
+
+
+# SECTION: PAGINACIÓN
+col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+
+with col1:
+    if st.session_state.page > 0:
+        if st.button("⬅️ Anterior", use_container_width=True):
+            st.session_state.page -= 1
+            st.rerun()
+
+with col5:
+    if len(inventory) == items_per_page and (st.session_state.page + 1) * items_per_page < total_count:
+        if st.button("Siguiente ➡️", use_container_width=True):
+            st.session_state.page += 1
+            st.rerun()
+
+with col3:
+    st.markdown(f"<div style='text-align: center; padding: 10px;'>Página **{st.session_state.page + 1}** de **{(total_count + items_per_page - 1) // items_per_page}**</div>", unsafe_allow_html=True)
