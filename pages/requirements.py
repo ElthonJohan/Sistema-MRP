@@ -86,19 +86,19 @@ with st.expander("🔍 Filtros", expanded=True):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        filter_id = st.number_input("ID Requerimiento", value=0, min_value=0, 
-                                     help="Dejar en 0 para no filtrar")
+        filter_id = st.number_input("ID Requerimiento", value=0, min_value=0,
+                                     help="Dejar en 0 para no filtrar", key="f_id")
     
     with col2:
-        filter_status = st.selectbox("Estado", 
+        filter_status = st.selectbox("Estado",
                                      ["", "pending", "fulfilled", "partial", "cancelled"],
-                                     help="Selecciona un estado o deja en blanco para todos")
+                                     help="Selecciona un estado o deja en blanco para todos", key="f_status")
     
     with col3:
-        filter_start_date = st.date_input("Desde", value=datetime.now() - timedelta(days=30))
+        filter_start_date = st.date_input("Desde", value=datetime.now() - timedelta(days=30), key="f_start")
     
     with col4:
-        filter_end_date = st.date_input("Hasta", value=datetime.now())
+        filter_end_date = st.date_input("Hasta", value=datetime.now(), key="f_end")
     
     col_search, col_clear = st.columns([1, 1])
     
@@ -106,12 +106,17 @@ with st.expander("🔍 Filtros", expanded=True):
         if st.button("🔎 Buscar", use_container_width=True):
             st.session_state.page = 0
             st.session_state.filters_applied = True
-    
+
+    def clear_filters():
+        st.session_state["f_id"] = 0
+        st.session_state["f_status"] = ""
+        st.session_state["f_start"] = (datetime.now() - timedelta(days=30)).date()
+        st.session_state["f_end"] = datetime.now().date()
+        st.session_state.page = 0
+        st.session_state.filters_applied = False
+
     with col_clear:
-        if st.button("🔄 Limpiar Filtros", use_container_width=True):
-            st.session_state.page = 0
-            st.session_state.filters_applied = False
-            st.rerun()
+        st.button("🔄 Limpiar Filtros", use_container_width=True, on_click=clear_filters)
 
 
 # SECTION: OBTENER DATOS CON FILTROS

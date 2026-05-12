@@ -142,13 +142,13 @@ with st.expander("🔍 Filtros", expanded=True):
     col1, col2,col3 = st.columns(3)
     
     with col1:
-        code_filter = st.text_input("Filtrar por código", value="")
+        code_filter = st.text_input("Filtrar por código", value="", key="m_code")
     
     with col2:
-        name_filter = st.text_input("Filtrar por nombre", value="")
+        name_filter = st.text_input("Filtrar por nombre", value="", key="m_name")
     
     with col3:
-        unit_filter = st.text_input("Filtrar por unidad", value="")
+        unit_filter = st.text_input("Filtrar por unidad", value="", key="m_unit")
 
     col_search, col_clear = st.columns([1, 1])
 
@@ -157,13 +157,15 @@ with st.expander("🔍 Filtros", expanded=True):
             st.session_state.page = 0
             st.session_state.filters_applied = True
     
+    def clear_materials_filters():
+        st.session_state["m_code"] = ""
+        st.session_state["m_name"] = ""
+        st.session_state["m_unit"] = ""
+        st.session_state.page = 0
+        st.session_state.filters_applied = False
+
     with col_clear:
-        if st.button("🔄 Limpiar Filtros", use_container_width=True):
-            # code_filter = ""
-            # name_filter = ""
-            st.session_state.page = 0
-            st.session_state.filters_applied = False
-            st.rerun()
+        st.button("🔄 Limpiar Filtros", use_container_width=True, on_click=clear_materials_filters)
 
 
 # SECTION: OBTENER DATOS CON FILTROS
