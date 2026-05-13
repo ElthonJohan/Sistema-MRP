@@ -5,6 +5,7 @@ from models.requirement import Requirement
 from models.material import Material
 from utils.auth import require_login
 from utils.navbar import render_navbar, render_sidebar_menu
+from utils.pdf_generator import generate_dispatch_pdf
 import time
 
 st.set_page_config(page_title="Despachos - MRP System", layout="wide")
@@ -111,6 +112,19 @@ else:
                     "Cantidad despachada": di.dispatched_qty
                 })
             st.table(mat_rows)
+            
+            #PDF
+            pdf_path = generate_dispatch_pdf(d)
+
+            with open(pdf_path, "rb") as pdf_file:
+                st.download_button(
+                label=f"📄 Descargar {d.guia_number}",
+                data=pdf_file,
+                file_name=f"{d.guia_number}.pdf",
+                mime="application/pdf",
+                key=f"pdf_{d.id}"
+            )
+            
         delete=st.button("Eliminar despacho", key=f"del_{d.id}")
         if delete:
             success = remove_dispatch(db, d.id)
