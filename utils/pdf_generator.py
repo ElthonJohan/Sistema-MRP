@@ -51,6 +51,7 @@ def generate_dispatch_pdf(dispatch):
             
             if destination_warehouse:
                 destination_name = destination_warehouse.name
+                destination_location = destination_warehouse.location
                 
      # Almacén origen
     origin_name = "Principal"
@@ -66,6 +67,12 @@ def generate_dispatch_pdf(dispatch):
             10,
             f"Almacén destino: {destination_name}",
             ln=True
+    )
+    pdf.cell(
+         100,
+         10,
+         f"Descripcion destino: {destination_location}",
+         ln=True
         )
     
 
