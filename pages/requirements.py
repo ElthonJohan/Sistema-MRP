@@ -59,6 +59,8 @@ if mat_dict:
             "material_id": mat_dict[mat],
             "qty": qty
         })
+    
+    
     if st.button("Crear Requerimiento"):
         success, msg = create_requirement(db, wh_dict[selected_wh], items)
         if success:

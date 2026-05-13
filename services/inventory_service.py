@@ -1,6 +1,9 @@
 from sqlalchemy.orm import Session
 from models.inventory import Inventory
+from models.material import Material
 from models.movement import Movement
+
+from models.warehouse import Warehouse
 from datetime import datetime
 
 def get_or_create_inventory(db: Session, warehouse_id, material_id):
@@ -90,3 +93,23 @@ def release_reservation(db: Session, warehouse_id, material_id, qty):
     
 def get_inventory(db: Session):
     return db.query(Inventory).all()
+
+def get_inventory_filtered(db: Session, skip: int = 0, limit: int = 10,
+                           warehouse_name: str = None, material_name: str = None, stock: int = None):
+    query = db.query(Inventory)
+
+    if warehouse_name:
+        query = query.join(Warehouse).filter(Warehouse.name.ilike(f"%{warehouse_name}%"))
+    if material_name:
+        query = query.join(Material).filter(Material.name.ilike(f"%{material_name}%"))
+    if stock is not None:
+        query = query.filter(Inventory.stock == stock)
+
+    query = query.order_by(Inventory.last_updated.desc())
+
+    total_count = query.count()
+
+    # Aplicar paginación
+    inventory = query.offset(skip).limit(limit).all()
+
+    return inventory, total_count

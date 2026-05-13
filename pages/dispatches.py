@@ -1,10 +1,11 @@
 import streamlit as st
 from database import SessionLocal
-from services.dispatch_service import create_dispatch
+from services.dispatch_service import create_dispatch, remove_dispatch
 from models.requirement import Requirement
 from models.material import Material
 from utils.auth import require_login
 from utils.navbar import render_navbar, render_sidebar_menu
+import time
 
 st.set_page_config(page_title="Despachos - MRP System", layout="wide")
 
@@ -80,5 +81,47 @@ if req and req.items:
         else:
             st.error(msg)
 
+
 else:
     st.info("No hay requerimientos con estado 'partial' o 'fulfilled'.")
+
+# -------------------------
+# LISTA DE DESPACHOS REALIZADOS
+# -------------------------
+from services.dispatch_service import get_dispatches
+from models.user import User
+from models.material import Material
+
+st.subheader("Despachos realizados")
+dispatches = get_dispatches(db)
+
+if not dispatches:
+    st.info("No hay despachos registrados.")
+else:
+    for d in dispatches:
+        st.markdown(f"**Guía:** {d.guia_number} | **Fecha:** {d.dispatch_date.strftime('%Y-%m-%d %H:%M')} | **Requerimiento:** {d.requirement_id} | **Usuario:** {d.user_id}")
+        if d.items:
+            mat_rows = []
+            for di in d.items:
+                # Buscar nombre del material
+                mat = db.query(Material).filter(Material.id == di.material_id).first()
+                mat_name = mat.name if mat else f"ID {di.material_id}"
+                mat_rows.append({
+                    "Material": mat_name,
+                    "Cantidad despachada": di.dispatched_qty
+                })
+            st.table(mat_rows)
+        delete=st.button("Eliminar despacho", key=f"del_{d.id}")
+        if delete:
+            success = remove_dispatch(db, d.id)
+            if success:
+                st.success("Despacho eliminado")
+            else:
+                st.error("Error al eliminar despacho")
+            time.sleep(1)
+            st.rerun()
+
+        st.markdown("---")
+        st.divider()
+
+

@@ -15,6 +15,10 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
     ]
     """
 
+
+    if not items or len(items) == 0:
+        return False, "Debe seleccionar al menos un material y cantidad para despachar."
+
     req = db.query(Requirement).filter(
         Requirement.id == requirement_id
     ).first()
@@ -113,3 +117,57 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
 
 def get_dispatches(db: Session):
     return db.query(Dispatch).all()
+
+def cancel_dispatch(db: Session, dispatch_id):
+    dispatch = db.query(Dispatch).filter(
+        Dispatch.id == dispatch_id
+    ).first()
+
+    if not dispatch:
+        return False
+
+    for item in dispatch.items:
+        # Revertir inventario
+        inventory = get_or_create_inventory(
+            db, dispatch.requirement.warehouse_id_obra, item.material_id
+        )
+        inventory.stock += item.dispatched_qty
+
+        # Revertir requerimiento item
+        req_item = next(
+            (i for i in dispatch.requirement.items if i.material_id == item.material_id),
+            None
+        )
+
+        if req_item:
+            req_item.fulfilled_qty -= item.dispatched_qty
+            if req_item.fulfilled_qty < 0:
+                req_item.fulfilled_qty = 0
+
+            req_item.status = "pending" 
+            if req_item.fulfilled_qty == 0 :
+                req_item.status = "fulfilled"
+            else:
+                req_item.status = "partial"
+
+    dispatch.status = "cancelled"
+    db.commit()
+    return True
+
+
+def get_dispatch_detail(db: Session, dispatch_id):
+    return db.query(Dispatch).filter(
+        Dispatch.id == dispatch_id
+    ).first()
+
+def remove_dispatch(db: Session, dispatch_id):
+    dispatch = db.query(Dispatch).filter(
+        Dispatch.id == dispatch_id
+    ).first()
+
+    if not dispatch:
+        return False
+
+    db.delete(dispatch)
+    db.commit()
+    return True

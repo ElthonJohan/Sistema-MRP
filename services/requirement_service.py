@@ -132,43 +132,43 @@ def cancel_requirement(db: Session, requirement_id):
 
 
 def reprocess_requirements(db: Session):
-    from models.requirement import Requirement
-    from models.warehouse import Warehouse
-    from services.inventory_service import reserve_stock
+    # from models.requirement import Requirement
+    # from models.warehouse import Warehouse
+    # from services.inventory_service import reserve_stock
 
-    principal = db.query(Warehouse).filter(
-        Warehouse.type == "principal"
-    ).first()
+    # principal = db.query(Warehouse).filter(
+    #     Warehouse.type == "principal"
+    # ).first()
 
-    requirements = db.query(Requirement).filter(
-        Requirement.status.in_(["pending", "partial"])
-    ).all()
+    # requirements = db.query(Requirement).filter(
+    #     Requirement.status.in_(["pending", "partial"])
+    # ).all()
 
-    for req in requirements:
-        all_reserved = True
+    # for req in requirements:
+    #     all_reserved = True
 
-        for item in req.items:
-            if item.status == "pending":
+    #     for item in req.items:
+    #         if item.status == "pending":
 
-                success = reserve_stock(
-                    db,
-                    principal.id,
-                    item.material_id,
-                    item.requested_qty
-                )
+    #             success = reserve_stock(
+    #                 db,
+    #                 principal.id,
+    #                 item.material_id,
+    #                 item.requested_qty
+    #             )
 
-                if success:
-                    item.status = "reserved"
-                else:
-                    all_reserved = False
+    #             if success:
+    #                 item.status = "reserved"
+    #             else:
+    #                 all_reserved = False
 
-        # estado global
-        if all_reserved:
-            req.status = "fulfilled"
-        else:
-            req.status = "partial"
+    #     # estado global
+    #     if all_reserved:
+    #         req.status = "fulfilled"
+    #     else:
+    #         req.status = "partial"
 
-    db.commit()
+    # db.commit()
 
 # def reprocess_requirements(db: Session):
     from models.requirement import Requirement
