@@ -86,6 +86,6 @@ for inv in inventory:
     col1, col2, col3, col4 = st.columns(4)
 
     col1.write(inv.warehouse.name)
-    col2.write(inv.material.name)
+    #col2.write(inv.material.name)
     col3.write(f"Stock: {inv.stock}")
     col4.write(f"Reservado: {inv.reserved}")
