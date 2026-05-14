@@ -1,18 +1,23 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+import streamlit as st
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# Prioridad: Secrets de Streamlit Cloud > .env local
+if "DATABASE_URL" in st.secrets:
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+else:
+    DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
-    raise ValueError("No se encontró DATABASE_URL en el archivo .env")
+    raise ValueError("DATABASE_URL no encontrada ni en secrets ni en .env")
 
 engine = create_engine(
     DATABASE_URL,
-    echo=False,           # Cambia a True si quieres ver las consultas SQL
+    echo=False,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10
