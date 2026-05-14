@@ -9,3 +9,11 @@ venv/
 
 storage/
 
+
+.venv/
+skills-lock.json
+.agents/
+
+*.tmp.*
+
+

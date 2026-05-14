@@ -3,7 +3,12 @@ from models.receipt import Receipt, ReceiptItem
 from models.dispatch import Dispatch
 from models.movement import Movement
 from services.inventory_service import get_or_create_inventory
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_LIMA = timezone(timedelta(hours=-5))  # Peru UTC-5, sin horario de verano
+
+def _now_lima() -> datetime:
+    return datetime.now(_LIMA).replace(tzinfo=None)
 
 
 def create_receipt(db: Session, dispatch_id, user_id=1):
@@ -24,7 +29,7 @@ def create_receipt(db: Session, dispatch_id, user_id=1):
 
     receipt = Receipt(
         dispatch_id=dispatch_id,
-        receipt_date=datetime.utcnow(),
+        receipt_date=_now_lima(),
         user_id=user_id
     )
 

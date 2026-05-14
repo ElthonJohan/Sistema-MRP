@@ -10,6 +10,7 @@ python-dateutil==2.9.0
 
 reportlab==4.1.0
 
+
 fpdf2==2.8.1
 
 # Opcional: si usasmos autenticación en Streamlit
