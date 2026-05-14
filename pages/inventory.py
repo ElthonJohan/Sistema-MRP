@@ -84,12 +84,7 @@ if "filters_applied" not in st.session_state:
     st.session_state.filters_applied = False
 
 
-<<<<<<< HEAD
-    col1.write(inv.warehouse.name)
-    #col2.write(inv.material.name)
-    col3.write(f"Stock: {inv.stock}")
-    col4.write(f"Reservado: {inv.reserved}")
-=======
+
 # SECTION: FILTROS
 with st.expander("🔍 Filtros", expanded=True):
     col1, col2, col3 = st.columns(3)
@@ -181,4 +176,3 @@ with col5:
 
 with col3:
     st.markdown(f"<div style='text-align: center; padding: 10px;'>Página **{st.session_state.page + 1}** de **{(total_count + items_per_page - 1) // items_per_page}**</div>", unsafe_allow_html=True)
->>>>>>> ac4f38607ff2b4a8766defa63c00f7409ea88f3a
