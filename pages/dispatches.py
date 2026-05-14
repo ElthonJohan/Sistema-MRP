@@ -389,22 +389,23 @@ else:
                             "Algunos ítems están sin stock y no se incluirán en el despacho. "
                             "Puedes despachar los ítems disponibles ahora."
                         )
-                    if st.button("Generar Despacho", type="primary", key="btn_gen_disp", use_container_width=False):
-                        if not items:
-                            st.warning("Debes ingresar al menos una cantidad mayor a 0.")
-                        else:
-                            success, result = create_dispatch(db, req_id, items, user_id=owner_id)
-                            if success:
-                                guia     = result
-                                username = get_current_username() or f"Usuario #{owner_id}"
-                                st.success(
-                                    f"Despacho generado exitosamente.  \n"
-                                    f"**Guía de Remisión:** {guia}  \n"
-                                    f"**Creado por:** {username}"
-                                )
-                                st.rerun()
-                            else:
-                                st.error(result)
+        # Usamos una clave única que incluya el ID del requerimiento para evitar duplicados
+        if st.button("Generar Despacho", type="primary", key=f"btn_gen_disp_{req.id}", use_container_width=False):
+            if not items:
+                st.warning("Debes ingresar al menos una cantidad mayor a 0.")
+            else:
+                success, result = create_dispatch(db, req_id, items, user_id=owner_id)
+                if success:
+                    guia     = result
+                    username = get_current_username() or f"Usuario #{owner_id}"
+                    st.success(
+                        f"Despacho generado exitosamente.  \n"
+                        f"**Guía de Remisión:** {guia}  \n"
+                        f"**Creado por:** {username}"
+                    )
+                    st.rerun()
+                else:
+                    st.error(result)
 
 # ── Historial de Despachos ────────────────────────────────────────────────────
 st.markdown('<div class="sec-title">Historial de Despachos</div>', unsafe_allow_html=True)
@@ -537,4 +538,3 @@ else:
         st.markdown("<div style='margin-bottom:.3rem'></div>", unsafe_allow_html=True)
 
 db.close()
-

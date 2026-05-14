@@ -18,7 +18,7 @@ def create_requirement(db: Session, warehouse_id, items):
 
     principal_warehouse = db.query(Warehouse).filter(
         Warehouse.owner_id == obra.owner_id,
-        Warehouse.name == "La vía"
+        Warehouse.type == "principal"
     ).first()
 
     if not principal_warehouse:
