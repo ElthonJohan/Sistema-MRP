@@ -15,12 +15,14 @@ else:
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL no encontrada ni en secrets ni en .env")
 
+# Configuración recomendada para Supabase
 engine = create_engine(
     DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
     pool_size=5,
-    max_overflow=10
+    max_overflow=10,
+    connect_args={"sslmode": "require"}   # Importante para Supabase
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
