@@ -260,107 +260,6 @@ with st.expander("Retirar stock de un almacén", expanded=False):
     out_mat = col_mat2.selectbox("Material", list(material_dict.keys()),  key=f"out_mat_{_rem_n}")
     out_qty = col_qty2.number_input("Cantidad", min_value=1, key=f"out_qty_{_rem_n}")
 
-
-# # Inicializar estado de paginación
-# if "page" not in st.session_state:
-#     st.session_state.page = 0
-# if "filters_applied" not in st.session_state:
-#     st.session_state.filters_applied = False
-
-
-
-# # SECTION: FILTROS
-# with st.expander("🔍 Filtros", expanded=True):
-#     col1, col2, col3 = st.columns(3)
-    
-#     with col1:
-#         filter_warehouse_name = st.text_input("Nombre Almacén", key="f_warehouse")
-    
-#     with col2:
-#         filter_material_name = st.text_input("Nombre Material", key="f_material")
-    
-#     with col3:
-#         filter_stock = st.number_input("Stock", min_value=0, key="f_stock")
-    
-
-    
-#     col_search, col_clear = st.columns([1, 1])
-    
-#     with col_search:
-#         if st.button("🔎 Buscar", use_container_width=True):
-#             st.session_state.page = 0
-#             st.session_state.filters_applied = True
-
-#     def clear_filters():
-#         st.session_state["f_warehouse"] = ""
-#         st.session_state["f_material"] = ""
-#         st.session_state["f_stock"] = 0
-#         st.session_state.page = 0
-#         st.session_state.filters_applied = False
-
-#     with col_clear:
-#         st.button("🔄 Limpiar Filtros", use_container_width=True, on_click=clear_filters)
-
-
-# # SECTION: OBTENER DATOS CON FILTROS
-# items_per_page = 10
-
-# #Aplicar filtros
-# filter_warehouse_name_val = filter_warehouse_name if filter_warehouse_name else None
-# filter_material_name_val = filter_material_name if filter_material_name else None
-# filter_stock_val = filter_stock if filter_stock else None
-
-# inventory, total_count = get_inventory_filtered(
-#     db,
-#     skip=st.session_state.page * items_per_page,
-#     limit=items_per_page,
-#     warehouse_name=filter_warehouse_name_val,
-#     material_name=filter_material_name_val,
-#     stock=filter_stock_val
-# )
-
-# if inventory:
-#     for inv in inventory:
-#         col1, col2, col3, col4 = st.columns(4)
-#         with col1:
-#             st.write("**Almacén:**", inv.warehouse.name)
-#         with col2:
-#             st.write("**Material:**", inv.material.name)
-#         with col3:
-#             st.write("**Stock:**", inv.stock)
-#         with col4:
-#             st.write("**Reservado:**", inv.reserved)
-
-#         with st.expander(f"👁️ Ver Detalle - Inventario #{inv.id}"):
-#             st.write("**Última actualización:**", inv.last_updated.strftime("%Y-%m-%d %H:%M:%S"))
-#             st.write("**ID Inventario:**", inv.id)
-#             st.write("**ID Almacén:**", inv.warehouse_id)
-#             st.write("**ID Material:**", inv.material_id)
-
-#         st.divider()
-
-# else:
-#     st.info("❌ No se encontraron registros con los filtros aplicados." if st.session_state.filters_applied else "No hay registros de inventario disponibles.")
-
-
-# # SECTION: PAGINACIÓN
-# col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
-
-# with col1:
-#     if st.session_state.page > 0:
-#         if st.button("⬅️ Anterior", use_container_width=True):
-#             st.session_state.page -= 1
-#             st.rerun()
-
-# with col5:
-#     if len(inventory) == items_per_page and (st.session_state.page + 1) * items_per_page < total_count:
-#         if st.button("Siguiente ➡️", use_container_width=True):
-#             st.session_state.page += 1
-#             st.rerun()
-
-# with col3:
-#     st.markdown(f"<div style='text-align: center; padding: 10px;'>Página **{st.session_state.page + 1}** de **{(total_count + items_per_page - 1) // items_per_page}**</div>", unsafe_allow_html=True)
-
     if st.button("Retirar Stock", type="primary", key=f"btn_rem_stock_{_rem_n}"):
         success = remove_stock(db, warehouse_dict[out_wh], material_dict[out_mat], out_qty, user_id=owner_id)
         if success:
@@ -441,12 +340,13 @@ else:
             wh_name     = inv.warehouse.name if inv.warehouse else f"Almacén {inv.warehouse_id}"
             wh_type     = inv.warehouse.type if inv.warehouse else "principal"
             mat_name    = inv.material.name  if inv.material  else f"Material {inv.material_id}"
-            mat_unit    = inv.material.unit  if inv.material  else ""
+            mat_unit    = str(inv.material.unit).strip() if inv.material and inv.material.unit else "uds"
             is_obra     = wh_type == "obra"
             border_c    = "rgba(13,148,136,.16)"  if is_obra else "rgba(37,99,235,.16)"
             bg_c        = "rgba(13,148,136,.05)"  if is_obra else "rgba(37,99,235,.05)"
 
             # Para almacenes de obra no existe "Reservado" — toda reserva se gestiona en principal
+            u_tag        = f"<span style='font-size:.72rem;opacity:.55;font-weight:600;margin-left:4px'>{mat_unit or 'uds'}</span>"
             if is_obra:
                 available    = inv.stock
                 avail_color  = "#34d399" if available > 0 else "#f87171"
@@ -468,17 +368,17 @@ else:
       <div>
         <span style="font-size:.63rem;font-weight:700;color:rgba(148,163,184,.55);
                      text-transform:uppercase;letter-spacing:.05em">Stock</span>
-        <span style="font-weight:900;color:#60a5fa;font-size:1rem;margin-left:.4rem">{inv.stock}</span>
+        <span style="font-weight:900;color:#60a5fa;font-size:1rem;margin-left:.4rem;display:inline-flex;align-items:baseline">{inv.stock}</span>
       </div>
       <div>
         <span style="font-size:.63rem;font-weight:700;color:rgba(148,163,184,.55);
                      text-transform:uppercase;letter-spacing:.05em">Reservado</span>
-        <span style="font-weight:900;color:#fbbf24;font-size:1rem;margin-left:.4rem">{inv.reserved}</span>
+        <span style="font-weight:900;color:#fbbf24;font-size:1rem;margin-left:.4rem;display:inline-flex;align-items:baseline">{inv.reserved}</span>
       </div>
       <div>
         <span style="font-size:.63rem;font-weight:700;color:rgba(148,163,184,.55);
                      text-transform:uppercase;letter-spacing:.05em">Disponible</span>
-        <span style="font-weight:900;color:{avail_color};font-size:1rem;margin-left:.4rem">{available}</span>
+        <span style="font-weight:900;color:{avail_color};font-size:1rem;margin-left:.4rem;display:inline-flex;align-items:baseline">{available}</span>
       </div>"""
 
             confirming = st.session_state.get("confirm_del_inv") == inv.id

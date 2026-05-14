@@ -72,7 +72,11 @@ def remove_stock(db: Session, warehouse_id, material_id, qty, user_id):
     return True
 
 def reserve_stock(db: Session, warehouse_id, material_id, qty):
-    # Solo busca — NO crea registro en blanco si no existe stock
+    """
+    Reserva stock para un requerimiento.
+    Modifica inventory.reserved en la sesión pero NO hace commit.
+    El llamador debe hacer commit después de todos los cambios.
+    """
     inventory = db.query(Inventory).filter(
         Inventory.warehouse_id == warehouse_id,
         Inventory.material_id == material_id,
@@ -82,7 +86,8 @@ def reserve_stock(db: Session, warehouse_id, material_id, qty):
         return False
 
     inventory.reserved += qty
-    db.commit()
+    inventory.last_updated = datetime.utcnow()
+    db.add(inventory)  # Asegura que SQLAlchemy trackee los cambios
     return True
 
 def release_reservation(db: Session, warehouse_id, material_id, qty):

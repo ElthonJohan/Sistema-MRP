@@ -198,7 +198,7 @@ if not sel_inv:
 else:
     for inv in sorted(sel_inv, key=lambda x: (x.material.name if x.material else ""), ):
         mat_name = inv.material.name if inv.material else f"Material {inv.material_id}"
-        mat_unit = inv.material.unit if inv.material else ""
+        mat_unit = (inv.material.unit or "").strip() if inv.material else ""
         initial  = mat_name[0].upper()
         zero_cls = "obra-mat-zero" if inv.stock == 0 else ""
         st.markdown(f"""
@@ -210,7 +210,7 @@ else:
   </div>
   <div class="obra-mat-stock">
     <div class="obra-mat-stock-num">{inv.stock}</div>
-    <div class="obra-mat-stock-lbl">{"Sin stock" if inv.stock == 0 else "unidades"}</div>
+    <div class="obra-mat-stock-lbl">{"Sin stock" if inv.stock == 0 else (mat_unit if mat_unit else "unidades")}</div>
   </div>
 </div>""", unsafe_allow_html=True)
 

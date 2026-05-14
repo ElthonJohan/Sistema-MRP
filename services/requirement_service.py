@@ -18,7 +18,7 @@ def create_requirement(db: Session, warehouse_id, items):
 
     principal_warehouse = db.query(Warehouse).filter(
         Warehouse.owner_id == obra.owner_id,
-        Warehouse.type == "principal"
+        Warehouse.name == "La vía"
     ).first()
 
     if not principal_warehouse:
@@ -33,18 +33,6 @@ def create_requirement(db: Session, warehouse_id, items):
     db.add(requirement)
     db.commit()
     db.refresh(requirement)
-
-
-    all_fulfilled = True
-    
-    principal_id = db.query(Warehouse).filter(Warehouse.type == "principal").first().id
-    principal_warehouse = db.query(Warehouse).filter(Warehouse.type == "principal").first()
-    
-    if not principal_warehouse:
-        return False, "No hay almacén principal configurado. Por favor crea uno primero."
-    
-    principal_id = principal_warehouse.id
-
 
     for item in items:
         material_id = item["material_id"]
@@ -191,7 +179,7 @@ def reprocess_requirements(db: Session):
         # Notificación: todos los ítems pasaron a tener stock reservado
         if had_pending:
             all_ready = all(
-                item.status in ("reserved", "fulfilled", "partial")
+                item.status in ("reserved", "fulfilled")
                 for item in req.items
             )
             if all_ready:

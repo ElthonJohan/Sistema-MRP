@@ -55,14 +55,18 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
         if qty > pendiente:
             return False, f"Cantidad {qty} excede lo pendiente ({pendiente}) para el material seleccionado"
 
+        # Validar que el item tiene stock reservado (no está en "pending")
+        if req_item.status == "pending":
+            material_name = req_item.material.name if req_item.material else f"Material {material_id}"
+            return False, f"Material '{material_name}' no tiene stock reservado. Ve a Inventario para agregar stock al almacén principal."
+        
         inventory = db.query(Inventory).filter(
             Inventory.warehouse_id == principal.id,
             Inventory.material_id == material_id,
         ).first()
 
-        stock_disponible = inventory.stock if inventory else 0
-        if stock_disponible < qty:
-            return False, "Stock insuficiente en el almacén principal"
+        if not inventory or inventory.stock < qty:
+            return False, "Stock insuficiente en el almacén principal para completar el despacho"
 
     # ── Fase 2: crear despacho y aplicar cambios en un solo commit ─────────────
     now = datetime.utcnow()
