@@ -6,23 +6,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Prioridad: Secrets de Streamlit Cloud > .env local
+# === Prioridad de conexión ===
 if "DATABASE_URL" in st.secrets:
     DATABASE_URL = st.secrets["DATABASE_URL"]
-else:
+    print("✅ Usando DATABASE_URL desde Streamlit Secrets")
+elif os.getenv("DATABASE_URL"):
     DATABASE_URL = os.getenv("DATABASE_URL")
+    print("✅ Usando DATABASE_URL desde .env")
+else:
+    raise ValueError("❌ No se encontró DATABASE_URL")
 
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL no encontrada ni en secrets ni en .env")
+print(f"URL cargada: {DATABASE_URL[:60]}...")   # Para debug
 
-# Configuración recomendada para Supabase
 engine = create_engine(
     DATABASE_URL,
     echo=False,
     pool_pre_ping=True,
     pool_size=5,
     max_overflow=10,
-    connect_args={"sslmode": "require"}   # Importante para Supabase
+    connect_args={"sslmode": "require"}
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

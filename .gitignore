@@ -20,3 +20,4 @@ skills-lock.json
 
 .env
 test_connection.py
+debug_db.py
