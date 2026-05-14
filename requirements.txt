@@ -1,0 +1,20 @@
+streamlit==1.56.0
+sqlalchemy==2.0.48
+#pandas==2.2.2
+
+# Para manejo de fechas y utilidades
+
+python-dateutil==2.9.0
+
+# Opcional: si luego generamos PDFs
+
+reportlab==4.1.0
+
+# Opcional: si usasmos autenticación en Streamlit
+
+streamlit-authenticator==0.3.2
+
+streamlit==1.56.0
+bcrypt==5.0.0
+plotly==5.22.0   # versión estable
+

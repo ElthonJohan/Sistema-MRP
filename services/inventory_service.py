@@ -42,7 +42,8 @@ def add_stock(db: Session, warehouse_id, material_id, qty, user_id):
 
     db.add(movement)
     db.commit()
-    reprocess_requirements(db)
+    newly_fulfilled = reprocess_requirements(db)
+    return newly_fulfilled
     
 def remove_stock(db: Session, warehouse_id, material_id, qty, user_id):
     inventory = get_or_create_inventory(db, warehouse_id, material_id)
@@ -68,11 +69,13 @@ def remove_stock(db: Session, warehouse_id, material_id, qty, user_id):
     return True
 
 def reserve_stock(db: Session, warehouse_id, material_id, qty):
-    inventory = get_or_create_inventory(db, warehouse_id, material_id)
+    # Solo busca — NO crea registro en blanco si no existe stock
+    inventory = db.query(Inventory).filter(
+        Inventory.warehouse_id == warehouse_id,
+        Inventory.material_id == material_id,
+    ).first()
 
-    available = inventory.stock - inventory.reserved
-
-    if available < qty:
+    if not inventory or (inventory.stock - inventory.reserved) < qty:
         return False
 
     inventory.reserved += qty
@@ -90,3 +93,11 @@ def release_reservation(db: Session, warehouse_id, material_id, qty):
     
 def get_inventory(db: Session):
     return db.query(Inventory).all()
+
+def delete_inventory_record(db: Session, inventory_id: int) -> bool:
+    inv = db.query(Inventory).filter(Inventory.id == inventory_id).first()
+    if inv:
+        db.delete(inv)
+        db.commit()
+        return True
+    return False

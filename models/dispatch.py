@@ -27,3 +27,5 @@ class DispatchItem(Base):
     material_id = Column(Integer, ForeignKey("materials.id"))
 
     dispatched_qty = Column(Integer)
+
+    material = relationship("Material")

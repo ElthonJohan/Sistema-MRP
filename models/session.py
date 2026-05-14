@@ -11,5 +11,6 @@ class UserSession(Base):
     session_token = Column(String(64), unique=True, index=True, nullable=False)
     user_id = Column(Integer, nullable=False)
     username = Column(String(100), nullable=False)
+    role = Column(String(20), nullable=False, default="cliente")
     created_at = Column(DateTime, default=datetime.utcnow)
     last_activity = Column(DateTime, default=datetime.utcnow)

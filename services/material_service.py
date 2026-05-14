@@ -34,6 +34,12 @@ def delete_material(db: Session, material_id):
     if material:
         db.delete(material)
         db.commit()
+        
+def delete_material_code(db: Session, code):
+    material = db.query(Material).filter(Material.code == code).first()
+    if material:
+        db.delete(material)
+        db.commit()
 
 # Actualizar
 def update_material(db: Session, material_id, code, name, unit, description):

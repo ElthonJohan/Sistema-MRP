@@ -7,13 +7,14 @@ from models.session import UserSession
 SESSION_TIMEOUT_MINUTES = 30
 
 
-def create_session(db: Session, user_id: int, username: str) -> str:
+def create_session(db: Session, user_id: int, username: str, role: str = "cliente") -> str:
     """Crea una nueva sesión persistente y devuelve el token."""
     token = secrets.token_hex(32)
     session = UserSession(
         session_token=token,
         user_id=user_id,
         username=username,
+        role=role,
         created_at=datetime.utcnow(),
         last_activity=datetime.utcnow(),
     )
@@ -28,6 +29,9 @@ def get_valid_session(db: Session, token: str):
     Devuelve el objeto UserSession si es válido, None si no existe o expiró.
     """
     if not token:
+        return None
+    # secrets.token_hex(32) = 64 hex chars; reject anything longer to prevent DoS
+    if len(token) > 128 or not token.isalnum():
         return None
 
     session = (
