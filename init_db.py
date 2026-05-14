@@ -1,52 +1,57 @@
+# init_db.py
 from database import Base, engine, SessionLocal
 
-# Importar todos los modelos para que SQLAlchemy los registre
-from models import warehouse, material, inventory
-from models import requirement, dispatch, receipt, movement
-
-from models import user, login_log, failed_login
-from models import session
+# Importar todos tus modelos
+from models import (
+    warehouse, material, inventory, requirement, 
+    dispatch, receipt, movement, user, 
+    login_log, failed_login, session
+)
 
 
 def run_migrations():
-    """Agrega columnas nuevas a tablas existentes sin destruir datos."""
+    """Migraciones manuales para agregar columnas"""
     from sqlalchemy import text, inspect
+
     inspector = inspect(engine)
     tables = inspector.get_table_names()
 
+    print("🔧 Ejecutando migraciones manuales...")
+
     with engine.connect() as conn:
-        # users: role + is_active
+        # users table
         if "users" in tables:
-            cols = [c["name"] for c in inspector.get_columns("users")]
+            cols = {c["name"] for c in inspector.get_columns("users")}
             if "role" not in cols:
-                conn.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR NOT NULL DEFAULT 'cliente'"))
-                print("  [migración] users.role añadido")
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR NOT NULL DEFAULT 'cliente'"))
+                print("  [✓] Columna role añadida en users")
             if "is_active" not in cols:
-                conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1"))
-                print("  [migración] users.is_active añadido")
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true"))
+                print("  [✓] Columna is_active añadida en users")
 
-        # user_sessions: role
+        # user_sessions table
         if "user_sessions" in tables:
-            cols = [c["name"] for c in inspector.get_columns("user_sessions")]
+            cols = {c["name"] for c in inspector.get_columns("user_sessions")}
             if "role" not in cols:
-                conn.execute(text("ALTER TABLE user_sessions ADD COLUMN role VARCHAR NOT NULL DEFAULT 'cliente'"))
-                print("  [migración] user_sessions.role añadido")
+                conn.execute(text("ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS role VARCHAR NOT NULL DEFAULT 'cliente'"))
+                print("  [✓] Columna role añadida en user_sessions")
 
-        # warehouses: owner_id, address
+        # warehouses table
         if "warehouses" in tables:
-            cols = [c["name"] for c in inspector.get_columns("warehouses")]
+            cols = {c["name"] for c in inspector.get_columns("warehouses")}
             if "owner_id" not in cols:
-                conn.execute(text("ALTER TABLE warehouses ADD COLUMN owner_id INTEGER"))
-                print("  [migración] warehouses.owner_id añadido")
+                conn.execute(text("ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS owner_id INTEGER"))
+                print("  [✓] Columna owner_id añadida en warehouses")
             if "address" not in cols:
-                conn.execute(text("ALTER TABLE warehouses ADD COLUMN address VARCHAR"))
-                print("  [migración] warehouses.address añadido")
+                conn.execute(text("ALTER TABLE warehouses ADD COLUMN IF NOT EXISTS address VARCHAR"))
+                print("  [✓] Columna address añadida en warehouses")
 
         conn.commit()
+    print("✅ Migraciones manuales completadas.\n")
 
 
 def bootstrap_superadmin():
-    """Crea el superadmin inicial si no existe ninguno."""
+    """Crea el usuario superadmin"""
     from services.auth_service import superadmin_exists, register_user
 
     db = SessionLocal()
@@ -56,33 +61,38 @@ def bootstrap_superadmin():
                 db,
                 username="superadmin",
                 email="admin@sistema-mrp.com",
-                password="Admin@12345",
+                password="Admin123!",
                 role="superadmin",
             )
             if ok:
-                print("\n" + "=" * 50)
-                print("  SUPERADMIN CREADO")
-                print("  Usuario:    superadmin")
-                print("  Email:      admin@sistema-mrp.com")
-                print("  Contraseña: Admin@12345")
-                print("  ¡Cambia la contraseña después del primer inicio de sesión!")
-                print("=" * 50 + "\n")
+                print("="*70)
+                print("🎉 SUPERADMIN CREADO EXITOSAMENTE")
+                print("="*70)
+                print("   Usuario:     superadmin")
+                print("   Email:       admin@sistema-mrp.com")
+                print("   Contraseña:  Admin123!")
+                print("   ¡Cambia esta contraseña en el primer inicio de sesión!")
+                print("="*70)
             else:
-                print(f"  [advertencia] No se pudo crear superadmin: {msg}")
+                print(f"⚠️  No se pudo crear superadmin: {msg}")
         else:
-            print("  Superadmin ya existe — no se creó uno nuevo.")
+            print("ℹ️  El superadmin ya existe.")
     finally:
         db.close()
 
 
-
 def init_db():
+    print("🚀 Iniciando base de datos PostgreSQL...\n")
+    
     run_migrations()
+    
+    # Crear todas las tablas (solo crea las que no existen)
     Base.metadata.create_all(bind=engine)
+    print("✅ Todas las tablas han sido verificadas/creadas.\n")
+    
     bootstrap_superadmin()
+    print("🎯 Inicialización de la base de datos completada.")
 
 
 if __name__ == "__main__":
-    print("Inicializando base de datos...")
     init_db()
-    print("Base de datos lista.")

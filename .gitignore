@@ -16,4 +16,7 @@ skills-lock.json
 
 *.tmp.*
 
+.streamlit/secrets.toml
 
+.env
+test_connection.py

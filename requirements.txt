@@ -19,5 +19,9 @@ streamlit-authenticator==0.3.2
 
 streamlit==1.56.0
 bcrypt==5.0.0
-plotly==5.22.0   # versión estable
+plotly==5.22.0 
 
+# migracion a postgres
+psycopg2-binary
+
+python-dotenv
