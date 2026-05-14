@@ -1,133 +1,85 @@
-from fpdf import FPDF
+import os
 from database import SessionLocal
 from models.material import Material
 from models.requirement import Requirement
 from models.warehouse import Warehouse
-import os
+from .advanced_pdf_generator import GuiaRemisionPDF  
 
 
 def generate_dispatch_pdf(dispatch):
+    """
+    Genera el PDF de la guía de remisión para el objeto dispatch dado.
+    Retorna la ruta del archivo generado.
+    """
     db = SessionLocal()
 
-    pdf = FPDF()
-    pdf.add_page()
+    try:
+        # Datos del requerimiento 
+        requirement = db.query(Requirement).filter(
+            Requirement.id == dispatch.requirement_id
+        ).first()
 
-    # TITULO
-    pdf.set_font("Arial", "B", 16)
-    pdf.cell(200, 10, "GUIA DE REMISION", ln=True, align="C")
+        destination_name     = "Desconocido"
+        destination_location = "Desconocido"
 
-    pdf.ln(10)
-
-    # DATOS
-    pdf.set_font("Arial", "", 12)
-
-    pdf.cell(100, 10, f"Guia: {dispatch.guia_number}", ln=True)
-
-    pdf.cell(
-        100,
-        10,
-        f"Fecha: {dispatch.dispatch_date.strftime('%Y-%m-%d %H:%M')}",
-        ln=True
-    )
-
-    pdf.cell(
-        100,
-        10,
-        f"Requerimiento ID: {dispatch.requirement_id}",
-        ln=True
-    )
-     # Obtener requerimiento
-    requirement = db.query(Requirement).filter(
-        Requirement.id == dispatch.requirement_id
-    ).first()
-     # Almacén destino
-    destination_name = "Desconocido"
-        
-    if requirement:
-            
+        if requirement:
             destination_warehouse = db.query(Warehouse).filter(
-                 Warehouse.id == requirement.warehouse_id_obra
+                Warehouse.id == requirement.warehouse_id_obra
             ).first()
-            
             if destination_warehouse:
-                destination_name = destination_warehouse.name
-                destination_location = destination_warehouse.location
-                
-     # Almacén origen
-    origin_name = "Principal"
-    pdf.cell(
-            100,
-            10,
-            f"Almacén origen: {origin_name}",
-            ln=True
-        )
-    
-    pdf.cell(
-            100,
-            10,
-            f"Almacén destino: {destination_name}",
-            ln=True
-    )
-    pdf.cell(
-         100,
-         10,
-         f"Descripcion destino: {destination_location}",
-         ln=True
-        )
-    
+                destination_name     = destination_warehouse.name
+                destination_location = destination_warehouse.location or ""
 
-    pdf.ln(10)
+        origin_name = "Almacén Principal"
+        origin_location = ""
 
-    # TABLA
-    pdf.set_font("Arial", "B", 12)
-
-    pdf.cell(100, 10, "Material", border=1)
-    pdf.cell(40, 10, "Cantidad", border=1)
-
-    pdf.ln()
-
-    pdf.set_font("Arial", "", 12)
-
-    for item in dispatch.items:
-
-        db = SessionLocal()
-        material = db.query(Material).filter(
-             Material.id == item.material_id
+        # Buscar el almacén principal en la base de datos
+        origin_warehouse = db.query(Warehouse).filter(
+            Warehouse.type == "Almacén Principal"
             ).first()
-        material_name = material.name if material else "Material"
-        pdf.cell(100, 10, material_name, border=1)
+        origin_name     = origin_warehouse.name     if origin_warehouse else "Almacén Principal"
+        origin_location = origin_warehouse.location if origin_warehouse else ""
 
-        pdf.cell(
-            40,
-            10,
-            str(item.dispatched_qty),
-            border=1
+        #  Fecha formateada 
+        if hasattr(dispatch.dispatch_date, "strftime"):
+            fecha_str = dispatch.dispatch_date.strftime("%d / %m / %Y")
+        else:
+            fecha_str = str(dispatch.dispatch_date)
+
+        #  Ítems de la guía 
+        items_data = []
+        for item in dispatch.items:
+            material = db.query(Material).filter(
+                Material.id == item.material_id
+            ).first()
+            material_name = material.name if material else "Material desconocido"
+            items_data.append({
+            "cantidad":    item.dispatched_qty,
+            "unidad":      material.unit if material and material.unit else "UND",
+            "descripcion": material_name,
+        })
+
+        # Generar PDF 
+        os.makedirs("storage/guides", exist_ok=True)
+        filename = f"storage/guides/{dispatch.guia_number}.pdf"
+
+        pdf = GuiaRemisionPDF(filename)
+        pdf.build(
+            guia_number        = dispatch.guia_number,
+            fecha_emision      = fecha_str,
+            fecha_traslado     = fecha_str,
+            punto_partida      = origin_name,
+            origen_ubicacion   = origin_location,                
+            punto_llegada      = destination_name,      
+            destino_ubicacion  = destination_location,  
+            destinatario       = destination_name,
+            ruc_destinatario   = "",
+            tipo_doc_dest      = "",
+            items              = items_data,
+            tipo_comprobante   = f"Requerimiento ID: {dispatch.requirement_id}",
         )
 
-        pdf.ln()
+        return filename
 
-    pdf.ln(20)
-
-    pdf.cell(
-        100,
-        10,
-        "Firma Responsable: __________________"
-    )
-    pdf.ln(20)
-    pdf.set_font("Arial", "I", 10)
-    pdf.cell(
-    200,
-    10,
-    "Documento generado automaticamente por el sistema MRP",
-    ln=True,
-    align="C"
-    )
-
-    # CREAR CARPETA
-    os.makedirs("storage/guides", exist_ok=True)
-
-    filename = f"storage/guides/{dispatch.guia_number}.pdf"
-
-    pdf.output(filename)
-
-    return filename
+    finally:
+        db.close()
