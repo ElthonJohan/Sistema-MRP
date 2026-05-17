@@ -44,7 +44,7 @@ else:
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
-        connect_args={"sslmode": "require"},
+        connect_args={"sslmode": "disable"} if "postgres" in DATABASE_URL else {},
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -327,24 +327,6 @@ if not sel_inv:
     st.info("Este almacén de obra no tiene stock registrado. El stock se actualiza automáticamente al confirmar recepciones.")
 else:
     for inv in sorted(sel_inv, key=lambda x: (x.material.name if x.material else ""), ):
-<<<<<<< HEAD
-        mat_name = inv.material.name if inv.material else f"Material {inv.material_id}"
-        mat_unit = (inv.material.unit or "").strip() if inv.material else ""
-        initial  = mat_name[0].upper()
-        zero_cls = "obra-mat-zero" if inv.stock == 0 else ""
-        st.markdown(f"""
-<div class="obra-mat-card {zero_cls}">
-  <div class="obra-mat-icon">{initial}</div>
-  <div class="obra-mat-info">
-    <div class="obra-mat-name">{mat_name}</div>
-    {"<div class='obra-mat-unit'>" + mat_unit + "</div>" if mat_unit else ""}
-  </div>
-  <div class="obra-mat-stock">
-    <div class="obra-mat-stock-num">{inv.stock}</div>
-    <div class="obra-mat-stock-lbl">{"Sin stock" if inv.stock == 0 else (mat_unit if mat_unit else "unidades")}</div>
-  </div>
-</div>""", unsafe_allow_html=True)
-=======
         mat_name    = inv.material.name if inv.material else f"Material {inv.material_id}"
         mat_unit    = (inv.material.unit or "").strip() if inv.material else ""
         mat_price   = float(inv.material.unit_price or 0.0) if inv.material else 0.0
@@ -407,7 +389,6 @@ else:
             '</div>',
             unsafe_allow_html=True,
         )
->>>>>>> c37b9497c2629ae31ffbee0f95a87afbff431497
 
 # ── Retirar stock del almacén de obra ─────────────────────────────────────────
 st.markdown('<div class="sec-title">Retirar Stock</div>', unsafe_allow_html=True)
