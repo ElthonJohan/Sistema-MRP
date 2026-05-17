@@ -12,7 +12,8 @@ from services.dashboard_service import (
     get_movements_last_7_days,
     get_top_materials_by_movement,
 )
-from utils.auth import require_cliente, get_current_user_id
+from services.budget_service import get_budgets, get_dispatch_costs
+from utils.auth import require_login, get_current_user_id
 from utils.navbar import render_navbar, render_sidebar_menu
 
 st.set_page_config(
@@ -21,17 +22,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-render_navbar()        # primero — inyecta CSS anti-flash
-require_cliente()      # redirige al superadmin hacia /admin
+render_navbar()   # oculta el nav nativo antes de cualquier query DB
+require_login()
 
-# ── Tema (sincronizado con session_state) ─────────────────────────────────────
-_dark  = st.session_state.get("dark_mode", False)
-
-_tpl        = "plotly_dark" if _dark else "plotly_white"
-_font       = "#e2e8f0"     if _dark else "#1e293b"
-_grid       = "rgba(255,255,255,0.07)" if _dark else "rgba(0,0,0,0.06)"
+# ── Tema (siempre oscuro) ─────────────────────────────────────────────────────
+_tpl        = "plotly_dark"
+_font       = "#e2e8f0"
+_grid       = "rgba(255,255,255,0.07)"
 _bg         = "rgba(0,0,0,0)"
-_surface    = "rgba(255,255,255,0.04)" if _dark else "rgba(255,255,255,0.85)"
+_surface    = "rgba(255,255,255,0.04)"
 
 # ── Estilos globales ──────────────────────────────────────────────────────────
 st.markdown("""
@@ -41,170 +40,103 @@ st.markdown("""
 [data-testid="stSidebarNav"]    { display: none !important; }
 [data-testid="stAppViewBlockContainer"] { padding-top: 1.2rem !important; }
 
-/* ══════════════ HERO ══════════════ */
+/* ── Hero de bienvenida ── */
 .dash-hero {
     display: flex; align-items: center; justify-content: space-between;
     flex-wrap: wrap; gap: .5rem;
-    padding: 1.1rem 1.6rem 1.3rem;
-    border-radius: 22px;
-    background: linear-gradient(135deg, #0a1628 0%, #1a3470 45%, #2563eb 100%);
-    margin-bottom: 1.6rem;
-    box-shadow: 0 8px 40px rgba(37,99,235,.30), 0 1px 0 rgba(255,255,255,.08) inset;
-    border: 1px solid rgba(255,255,255,.07);
-    position: relative; overflow: hidden;
+    padding: 1rem 1.5rem 1.2rem;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #0f2544 0%, #1e3a8a 55%, #2563eb 100%);
+    margin-bottom: 1.5rem;
+    box-shadow: 0 8px 32px rgba(37,99,235,.28);
 }
-/* Glow sutil en la esquina derecha del hero */
-.dash-hero::after {
-    content: "";
-    position: absolute; right: -40px; top: -40px;
-    width: 180px; height: 180px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(96,165,250,.18) 0%, transparent 70%);
-    pointer-events: none;
-}
-.dash-hero-left { display: flex; align-items: center; gap: 1rem; position: relative; z-index: 1; }
+.dash-hero-left { display: flex; align-items: center; gap: 1rem; }
 .dash-hero-icon {
-    width: 52px; height: 52px; border-radius: 14px;
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,.18);
+    width: 60px; height: 60px; border-radius: 16px;
+    background: rgba(255,255,255,0.15);
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
 }
+/* Logo mark 2x2 en hero */
 .hero-mark-sm {
     display: inline-grid; grid-template-columns: 1fr 1fr; gap: 4px;
 }
 .hero-mark-sm span { display:block; width:13px; height:13px; border-radius:3px; }
-.hms-1{background:#fff;opacity:.95} .hms-2{background:#fff;opacity:.45}
-.hms-3{background:#fff;opacity:.45} .hms-4{background:#fff;opacity:.95}
-.dash-hero h1  { font-size: 1.5rem; font-weight: 900; color: #fff; margin: 0; letter-spacing: -.02em; }
-.dash-hero p   { font-size: .80rem; color: rgba(255,255,255,.62); margin: 3px 0 0; }
-.dash-hero-right { display: flex; align-items: center; gap: .65rem; position: relative; z-index: 1; }
+.hms-1{background:#fff;opacity:.9} .hms-2{background:#fff;opacity:.5}
+.hms-3{background:#fff;opacity:.5} .hms-4{background:#fff;opacity:.9}
+.dash-hero h1  { font-size: 1.55rem; font-weight: 900; color: #fff; margin: 0; }
+.dash-hero p   { font-size: .82rem; color: rgba(255,255,255,.70); margin: 2px 0 0; }
 .dash-hero-badge {
-    background: rgba(255,255,255,0.12);
-    border: 1px solid rgba(255,255,255,.20);
-    border-radius: 30px; padding: .38rem 1rem;
-    font-size: .77rem; font-weight: 700; color: #fff;
-    white-space: nowrap; display: flex; align-items: center; gap: .35rem;
-    backdrop-filter: blur(8px);
-}
-.dash-hero-kpi-chip {
-    background: rgba(255,255,255,0.10);
-    border: 1px solid rgba(255,255,255,.15);
-    border-radius: 24px; padding: .32rem .8rem;
-    font-size: .72rem; font-weight: 600; color: rgba(255,255,255,.85);
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,.25);
+    border-radius: 30px; padding: .35rem 1rem;
+    font-size: .78rem; font-weight: 700; color: #fff;
     white-space: nowrap;
 }
 
-/* ══════════════ KPI CARDS ══════════════ */
+/* ── KPI cards ── */
 .kpi-wrap {
-    border-radius: 18px; padding: 1.25rem 1.4rem;
+    border-radius: 18px; padding: 1.3rem 1.4rem;
     position: relative; overflow: hidden;
-    transition: transform .22s ease, box-shadow .22s ease;
+    transition: transform .2s ease, box-shadow .2s ease;
     cursor: default;
-    border: 1px solid rgba(255,255,255,.06);
 }
-/* Accent bar on top */
-.kpi-wrap::before {
-    content: "";
-    position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    background: rgba(255,255,255,.25);
-    border-radius: 18px 18px 0 0;
-}
-.kpi-wrap:hover { transform: translateY(-5px); }
-.k-blue:hover  { box-shadow: 0 18px 48px rgba(37,99,235,.40) !important; }
-.k-amber:hover { box-shadow: 0 18px 48px rgba(217,119,6,.40) !important; }
-.k-violet:hover{ box-shadow: 0 18px 48px rgba(124,58,237,.40) !important; }
-.k-teal:hover  { box-shadow: 0 18px 48px rgba(13,148,136,.40) !important; }
-
+.kpi-wrap:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,.25); }
+/* Icono SVG flotante decorativo */
 .kpi-icon-bg {
-    position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
-    opacity: 0.12; pointer-events: none;
+    position: absolute; right: 1.1rem; top: 50%; transform: translateY(-50%);
+    opacity: 0.14; pointer-events: none;
 }
-.kpi-icon-bg svg { width: 58px; height: 58px; stroke: white; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.kpi-label { font-size: .70rem; font-weight: 700; text-transform: uppercase;
-             letter-spacing: .12em; opacity: .75; margin-bottom: .35rem; }
-.kpi-val   { font-size: 2.5rem; font-weight: 900; line-height: 1; margin-bottom: .2rem; }
-.kpi-sub   { font-size: .73rem; opacity: .60; }
+.kpi-icon-bg svg { width: 54px; height: 54px; stroke: white; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.kpi-label { font-size: .72rem; font-weight: 700; text-transform: uppercase;
+             letter-spacing: .1em; opacity: .80; margin-bottom: .3rem; }
+.kpi-val   { font-size: 2.6rem; font-weight: 900; line-height: 1; margin-bottom: .25rem; }
+.kpi-sub   { font-size: .75rem; opacity: .65; }
 .kpi-badge { display:inline-block; padding:.15rem .55rem; border-radius:20px;
              font-size:.68rem; font-weight:700; margin-top:.4rem; }
 
-.k-blue   { background: linear-gradient(145deg,#1a3270,#2563eb); color:#fff;
-            box-shadow: 0 8px 28px rgba(37,99,235,.25); }
-.k-amber  { background: linear-gradient(145deg,#6b2d0f,#d97706); color:#fff;
-            box-shadow: 0 8px 28px rgba(217,119,6,.25); }
-.k-violet { background: linear-gradient(145deg,#3b176e,#7c3aed); color:#fff;
-            box-shadow: 0 8px 28px rgba(124,58,237,.25); }
-.k-teal   { background: linear-gradient(145deg,#0f4040,#0d9488); color:#fff;
-            box-shadow: 0 8px 28px rgba(13,148,136,.25); }
+.k-blue   { background: linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; }
+.k-amber  { background: linear-gradient(135deg,#78350f,#d97706); color:#fff; }
+.k-violet { background: linear-gradient(135deg,#4c1d95,#7c3aed); color:#fff; }
+.k-teal   { background: linear-gradient(135deg,#134e4a,#0d9488); color:#fff; }
 
-/* ══════════════ SECTION TITLES ══════════════ */
+/* ── Section title ── */
 .sec-title {
-    font-size: .95rem; font-weight: 800;
+    font-size: 1rem; font-weight: 800;
     display: flex; align-items: center; gap: .55rem;
-    padding: .55rem .9rem;
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--text-color,#0f172a) 5%, transparent);
-    border-left: 3px solid #2563eb;
-    margin: 1.8rem 0 .85rem;
-    letter-spacing: .005em;
+    padding-left: .8rem;
+    border-left: 4px solid #2563eb;
+    margin: 2rem 0 .9rem;
+    letter-spacing: .01em;
 }
-.sec-title svg { width: 15px; height: 15px; stroke: #2563eb; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
-.sec-num {
-    font-size: .65rem; font-weight: 700; color: #2563eb;
-    background: rgba(37,99,235,.12); border-radius: 6px;
-    padding: .15rem .38rem; letter-spacing: .04em; margin-left: auto;
-}
-
-/* ══════════════ CHART CARDS ══════════════ */
-[data-testid="stPlotlyChart"] {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-}
+.sec-title svg { width: 16px; height: 16px; stroke: #2563eb; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 
 /* ── Tabla de movimientos ── */
-[data-testid="stDataFrame"] {
-    border-radius: 14px !important;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--text-color,#0f172a) 7%, transparent) !important;
-}
+[data-testid="stDataFrame"] { border-radius: 12px !important; overflow: hidden; }
 
-/* ══════════════ ACTIVITY FEED ══════════════ */
+/* ── Activity feed ── */
 .feed-item {
     display: flex; align-items: flex-start; gap: .75rem;
-    padding: .6rem .8rem;
-    border-radius: 10px; margin-bottom: .4rem;
-    border: 1px solid transparent;
-    transition: background .15s, border-color .15s;
+    padding: .65rem .85rem;
+    border-radius: 12px; margin-bottom: .45rem;
+    transition: background .15s;
 }
-.feed-item:hover {
-    background: rgba(37,99,235,.06);
-    border-color: rgba(37,99,235,.12);
-}
+.feed-item:hover { background: rgba(37,99,235,.07); }
 .feed-dot {
-    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
-    margin-top: 6px;
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    margin-top: 5px;
 }
-.feed-in  { background: #10b981; box-shadow: 0 0 0 3px rgba(16,185,129,.20); }
-.feed-out { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.20); }
-.feed-body { flex: 1; min-width: 0; }
-.feed-body strong { font-size: .84rem; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.feed-body span   { font-size: .72rem; opacity: .55; }
-.feed-ts { font-size: .68rem; opacity: .45; flex-shrink: 0; margin-top: 6px; }
-
+.feed-in  { background: #10b981; }
+.feed-out { background: #f59e0b; }
+.feed-body { flex: 1; }
+.feed-body strong { font-size: .85rem; display: block; }
+.feed-body span   { font-size: .74rem; opacity: .6; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Navbar + Sidebar ──────────────────────────────────────────────────────────
-render_navbar()
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     render_sidebar_menu()
-
-# ── Datos (filtrados por el cliente actual) ───────────────────────────────────
-db       = SessionLocal()
-owner_id = get_current_user_id()
-kpis     = get_kpis(db, owner_id=owner_id)
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
 now  = datetime.now()
@@ -223,22 +155,66 @@ st.markdown(f"""
       </div>
     </div>
     <div>
-      <h1>{greeting}, {user} 👋</h1>
+      <h1>{greeting}, {user}</h1>
       <p>Dashboard Logístico &nbsp;·&nbsp; {now.strftime("%A %d de %B, %Y")}</p>
     </div>
   </div>
-  <div class="dash-hero-right">
-    <div class="dash-hero-kpi-chip">
-      <svg viewBox="0 0 24 24" width="11" height="11" style="stroke:rgba(255,255,255,.7);fill:none;stroke-width:2;vertical-align:middle;margin-right:3px"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8"/></svg>
-      {kpis['total_stock']:,} uds en stock
-    </div>
-    <div class="dash-hero-badge">
-      <svg viewBox="0 0 24 24" width="11" height="11" style="stroke:#fff;fill:none;stroke-width:2;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      {now.strftime("%H:%M")}
-    </div>
+  <div class="dash-hero-badge">
+    <svg viewBox="0 0 24 24" width="12" height="12" style="stroke:#fff;fill:none;stroke-width:2;vertical-align:middle;margin-right:4px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>{now.strftime("%H:%M")}
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ── Datos ─────────────────────────────────────────────────────────────────────
+db   = SessionLocal()
+owner_id = get_current_user_id()
+kpis = get_kpis(db, owner_id=owner_id)
+
+# ── Botones Instrucciones y Presupuestos ──────────────────────────────────────
+_, _col_help_dash, _col_bud_dash = st.columns([4, 1.5, 1.5])
+
+with _col_help_dash.popover("📋 Instrucciones", use_container_width=True):
+    st.markdown("#### Guía de Uso del Dashboard")
+    st.markdown("""
+**Stock Total** — Suma de todas las unidades en almacenes del sistema.
+
+**Materiales Críticos** — Items con stock ≤ 5 en el almacén principal; requieren reposición urgente.
+
+**Pendientes** — Requerimientos creados pero aún no despachados completamente.
+
+**Despachos** — Total de salidas registradas desde el inicio del sistema.
+
+---
+
+**Flujo operativo:**
+1. Crear un **Requerimiento** en un almacén de obra.
+2. El sistema reserva automáticamente stock del almacén principal.
+3. Generar un **Despacho** para enviar el material.
+4. Registrar la **Recepción** cuando llega a la obra.
+
+---
+
+**Gráficos:**
+- *Tendencia 7 días* — Entradas y salidas por día.
+- *Distribución de stock* — Proporción por almacén.
+- *Top 5 materiales* — Los más movidos del período.
+""")
+
+with _col_bud_dash.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds_dash = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds_dash:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds_dash:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
 k1, k2, k3, k4 = st.columns(4, gap="medium")
@@ -404,44 +380,123 @@ with col_top:
     else:
         st.info("Sin datos de movimientos.")
 
-# ── Fila 4: Actividad reciente ────────────────────────────────────────────────
-movs = get_recent_movements(db, owner_id=owner_id)
+# ── Fila 4: Presupuesto vs Gasto por Proyecto ────────────────────────────────
+_all_buds = [b for b in get_budgets(db) if b.budget_soles > 0]
 
-st.markdown(
-    f'<div class="sec-title"><svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/>'
-    f'<path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/>'
-    f'<path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>Actividad Reciente'
-    f'<span class="sec-num">{len(movs)} mov.</span></div>',
-    unsafe_allow_html=True,
-)
+if _all_buds:
+    st.markdown('<div class="sec-title"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Presupuesto vs. Gasto por Proyecto (S/.)</div>', unsafe_allow_html=True)
+
+    _bud_rows = []
+    for _b in _all_buds:
+        _, _spent, _ = get_dispatch_costs(db, since=_b.created_at)
+        _label = _b.name[:28] + ("…" if len(_b.name) > 28 else "")
+        _fin = getattr(_b, "is_finished", False)
+        _bud_rows.append({
+            "Proyecto":         _label,
+            "Presupuesto S/.":  _b.budget_soles,
+            "Gasto S/.":        _spent,
+            "_over":            _spent > _b.budget_soles,
+            "_finished":        _fin,
+        })
+
+    if _bud_rows:
+        _df_bud = pd.DataFrame(_bud_rows)
+        _gasto_colors = [
+            "#ef4444" if r["_over"] else ("#6366f1" if r["_finished"] else "#059669")
+            for _, r in _df_bud.iterrows()
+        ]
+        _fig_bud = go.Figure()
+        _fig_bud.add_trace(go.Bar(
+            name="Presupuesto S/.",
+            x=_df_bud["Proyecto"],
+            y=_df_bud["Presupuesto S/."],
+            marker_color="#1e40af",
+            text=[f"S/ {v:,.0f}" for v in _df_bud["Presupuesto S/."]],
+            textposition="outside",
+            textfont=dict(color=_font, size=10),
+        ))
+        _fig_bud.add_trace(go.Bar(
+            name="Gasto S/.",
+            x=_df_bud["Proyecto"],
+            y=_df_bud["Gasto S/."],
+            marker_color=_gasto_colors,
+            text=[f"S/ {v:,.0f}" for v in _df_bud["Gasto S/."]],
+            textposition="outside",
+            textfont=dict(color=_font, size=10),
+        ))
+        _fig_bud.update_layout(
+            barmode="group",
+            template=_tpl,
+            paper_bgcolor=_bg, plot_bgcolor=_bg,
+            margin=dict(t=30, b=10, l=0, r=0), height=300,
+            font=dict(color=_font, size=12),
+            xaxis=dict(gridcolor=_grid, tickfont=dict(size=11)),
+            yaxis=dict(gridcolor=_grid, tickprefix="S/ "),
+            legend=dict(orientation="h", y=1.12, x=0),
+            hovermode="x unified",
+        )
+        _fig_bud.update_traces(marker_line_width=0)
+        st.plotly_chart(_fig_bud, use_container_width=True)
+        st.markdown(
+            '<div style="font-size:.73rem;color:rgba(255,255,255,.38);margin-top:-.5rem;margin-bottom:.5rem;">'
+            '&#9632; Azul = Presupuesto &nbsp;·&nbsp; &#9632; Verde = Gasto dentro del presupuesto &nbsp;·&nbsp;'
+            ' &#9632; Rojo = Excede el presupuesto &nbsp;·&nbsp; &#9632; Índigo = Obra finalizada</div>',
+            unsafe_allow_html=True,
+        )
+
+# ── Fila 5: Actividad reciente ────────────────────────────────────────────────
+st.markdown('<div class="sec-title"><svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>Actividad Reciente</div>', unsafe_allow_html=True)
+
+movs = get_recent_movements(db, owner_id=owner_id)
 
 if not movs:
     st.info("No hay movimientos registrados aún.")
 else:
-    col_l, col_r = st.columns(2, gap="medium")
-    mid = (len(movs) + 1) // 2
+    col_feed, col_table = st.columns([1, 2], gap="large")
 
-    for col, batch in ((col_l, movs[:mid]), (col_r, movs[mid:])):
-        with col:
-            for m in batch:
-                tipo  = m.movement_type or "?"
-                mat   = m.material.name  if m.material  else "—"
-                wh    = m.warehouse.name if m.warehouse else "—"
-                ts    = m.timestamp.strftime("%d/%m %H:%M") if m.timestamp else "—"
-                dot   = "feed-in" if tipo == "IN" else "feed-out"
-                label = "Entrada" if tipo == "IN" else "Salida"
-                qty   = f"+{m.qty_change}" if tipo == "IN" else f"-{m.qty_change}"
-                qcol  = "#10b981" if tipo == "IN" else "#f59e0b"
-                arrow = "&#8593;" if tipo == "IN" else "&#8595;"
-                st.markdown(f"""
-<div class="feed-item">
-  <div class="feed-dot {dot}"></div>
-  <div class="feed-body">
-    <strong>{label} &nbsp;<span style='color:{qcol}'>{arrow} {qty} uds</span></strong>
-    <span>{mat} &nbsp;·&nbsp; {wh}</span>
-    <span style='display:block;font-size:.66rem;opacity:.40;margin-top:.1rem'>{ts}</span>
-  </div>
-</div>""", unsafe_allow_html=True)
+    with col_feed:
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        for m in movs[:8]:
+            tipo  = m.movement_type or "?"
+            mat   = m.material.name  if m.material  else "—"
+            wh    = m.warehouse.name if m.warehouse else "—"
+            ts    = m.timestamp.strftime("%d/%m %H:%M") if m.timestamp else "—"
+            dot   = "feed-in" if tipo == "IN" else "feed-out"
+            label = "Entrada" if tipo == "IN" else "Salida"
+            qty   = f"+{m.qty_change}" if tipo == "IN" else f"-{m.qty_change}"
+            qcol  = "#10b981" if tipo == "IN" else "#f59e0b"
+            arrow = "&#8593;" if tipo == "IN" else "&#8595;"
+            st.markdown(f"""
+            <div class="feed-item">
+              <div class="feed-dot {dot}"></div>
+              <div class="feed-body">
+                <strong>{label} <span style='color:{qcol}'>{arrow} {qty} uds</span></strong>
+                <span>{mat} &nbsp;·&nbsp; {wh} &nbsp;·&nbsp; {ts}</span>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+    with col_table:
+        mov_rows = []
+        for m in movs:
+            mov_rows.append({
+                "Tipo"     : "↑ Entrada" if m.movement_type == "IN" else "↓ Salida",
+                "Material" : m.material.name  if m.material  else "—",
+                "Almacén"  : m.warehouse.name if m.warehouse else "—",
+                "Cantidad" : m.qty_change,
+                "Fecha"    : m.timestamp.strftime("%d/%m/%Y %H:%M") if m.timestamp else "—",
+            })
+        df_movs = pd.DataFrame(mov_rows)
+
+        def _row_style(row):
+            c = "rgba(16,185,129,.10)" if "Entrada" in row["Tipo"] else "rgba(245,158,11,.10)"
+            return [f"background:{c}"] * len(row)
+
+        st.dataframe(
+            df_movs.style.apply(_row_style, axis=1)
+                         .set_properties(**{"font-size": "0.84rem"}),
+            use_container_width=True,
+            hide_index=True,
+            height=320,
+        )
 
 db.close()
-

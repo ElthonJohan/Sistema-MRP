@@ -33,10 +33,27 @@ def get_owner_warehouse_ids(db: Session, owner_id: int) -> list[int]:
     return [r[0] for r in rows]
 
 def delete_warehouse(db: Session, warehouse_id):
+    from models.requirement import Requirement
+    from services.requirement_service import cancel_requirement
+
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
-    if warehouse:
-        db.delete(warehouse)
-        db.commit()
+    if not warehouse:
+        return
+
+    # Cancelar requerimientos activos asociados a este almacén de obra
+    active_reqs = (
+        db.query(Requirement)
+        .filter(
+            Requirement.warehouse_id_obra == warehouse_id,
+            Requirement.status.notin_(["cancelled", "fulfilled"]),
+        )
+        .all()
+    )
+    for req in active_reqs:
+        cancel_requirement(db, req.id, reason=f"Almacén eliminado: {warehouse.name}")
+
+    db.delete(warehouse)
+    db.commit()
 
 def update_warehouse(db: Session, warehouse_id, name, type, location, address=None):
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()

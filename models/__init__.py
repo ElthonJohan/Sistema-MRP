@@ -8,3 +8,5 @@ from .movement import Movement
 from .user import User
 from .login_log import LoginLog
 from .failed_login import FailedLoginAttempt
+from .budget import Budget
+from .deleted_inventory import DeletedInventory

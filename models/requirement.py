@@ -13,6 +13,9 @@ class Requirement(Base):
     status = Column(String, default="pending")
     notes = Column(String)
 
+    budget_id   = Column(Integer, ForeignKey("budgets.id"), nullable=True)
+    budget_name = Column(String, nullable=True)
+
     items = relationship("RequirementItem", back_populates="requirement")
     dispatches = relationship("Dispatch", back_populates="requirement")
 

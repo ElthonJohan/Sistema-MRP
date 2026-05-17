@@ -10,6 +10,7 @@ _PAGE_KEYS = {
     "pages/inventory.py":       "menu_inventory",
     "pages/inventory_obra.py":  "menu_inventory_obra",
     "pages/access_logs.py":     "menu_access_logs",
+    "pages/presupuestos.py":    "menu_presupuestos",
 }
 
 def _apply_theme():
@@ -31,22 +32,62 @@ def _current_page() -> str:
     return st.session_state.get("_current_page", "")
 
 def render_navbar():
-    """Oculta la nav nativa y aplica animación de entrada para eliminar el flash entre páginas."""
+    """Oculta la nav nativa e inyecta overlay de transición para eliminar el flash entre páginas."""
     st.markdown("""
     <style>
+    /* Oculta el nav nativo inmediatamente — múltiples selectores para mayor cobertura */
     [data-testid='stSidebarNav'],
     [data-testid='stSidebarNavItems'],
-    [data-testid='stSidebarNavLink'] {
+    [data-testid='stSidebarNavLink'],
+    [data-testid='stSidebarNavSeparator'],
+    nav[data-testid='stSidebarNav'],
+    [data-testid='stSidebar'] > div > ul,
+    [data-testid='stSidebar'] nav {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
+        pointer-events: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
     }
+
+    /* Sidebar invisible hasta que el overlay se haya ido — evita el flash del menú nativo */
+    section[data-testid='stSidebar'] {
+        opacity: 0;
+        animation: _sb_appear 0.12s ease-out 0.28s forwards;
+    }
+    @keyframes _sb_appear {
+        to { opacity: 1; }
+    }
+
+    /* ── Overlay de transición de página ──────────────────────────────────────
+       Cubre el viewport completo (incluyendo sidebar) durante el flash inicial.
+       Se mantiene sólido 160ms y luego desaparece en 120ms — suficiente para que
+       React aplique todos los estilos antes de que el usuario vea algo. */
+    @keyframes _mrp_overlay_out {
+        0%   { opacity: 1; }
+        55%  { opacity: 1; }
+        100% { opacity: 0; visibility: hidden; pointer-events: none; }
+    }
+    #_mrp_pg_cover {
+        position: fixed !important;
+        inset: 0 !important;
+        background: #060c1a;
+        z-index: 999999 !important;
+        pointer-events: none !important;
+        animation: _mrp_overlay_out 0.32s ease-out 0s forwards !important;
+    }
+
+    /* Animación de contenido principal — fade breve desde casi visible */
     @keyframes _pg_in {
-        from { opacity: 0; transform: translateY(5px); }
-        to   { opacity: 1; transform: translateY(0); }
+        from { opacity: 0.4; }
+        to   { opacity: 1; }
     }
-    [data-testid="stMain"] { animation: _pg_in 0.18s ease-out; }
+    [data-testid="stMain"] {
+        animation: _pg_in 0.10s ease-out 0.28s both;
+    }
     </style>
+    <div id="_mrp_pg_cover"></div>
     """, unsafe_allow_html=True)
 
 
@@ -371,6 +412,13 @@ def render_sidebar_menu():
     [data-testid="stSidebar"] [data-testid="stBaseButton-primary"][data-nav="inventory_obra"]::before {
         opacity: 1;
     }
+    [data-testid="stSidebar"] button[data-nav="presupuestos"]::before {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334d399' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='12' y1='1' x2='12' y2='23'/%3E%3Cpath d='M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6'/%3E%3C/svg%3E");
+        opacity: .75;
+    }
+    [data-testid="stSidebar"] [data-testid="stBaseButton-primary"][data-nav="presupuestos"]::before {
+        opacity: 1;
+    }
     [data-testid="stSidebar"] button[data-nav="access_logs"]::before {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E");
         opacity: .75;
@@ -478,7 +526,8 @@ def render_sidebar_menu():
         'Requerimientos':'requirements','Recepciones':'receipts','Despachos':'dispatches',
         'Inventario Principal':'inventory','Inventario Obra':'inventory_obra',
         'Logs de Acceso':'access_logs','Cerrar sesión':'logout',
-        'Panel de Usuarios':'admin','← Salir de vista':'exit_imp'
+        'Panel de Usuarios':'admin','← Salir de vista':'exit_imp',
+        'Presupuestos':'presupuestos'
       };
       function tag(){
         document.querySelectorAll('[data-testid="stSidebar"] button').forEach(function(b){
@@ -490,7 +539,7 @@ def render_sidebar_menu():
       var obs=new MutationObserver(tag);
       var sb=document.querySelector('[data-testid="stSidebar"]');
       if(sb) obs.observe(sb,{childList:true,subtree:true});
-      setTimeout(tag,400); setTimeout(tag,1200);
+      setTimeout(tag,200); setTimeout(tag,600);
     })();
     </script>
     """, unsafe_allow_html=True)
@@ -566,11 +615,15 @@ def render_sidebar_menu():
     # ── Menú según rol / estado de impersonación ──────────────────────────────
     if role == "superadmin" and not is_impersonating:
         st.markdown('<p class="sb-section">Administración</p>', unsafe_allow_html=True)
-        _btn("Panel de Usuarios", "pages/admin.py",      "menu_admin")
+        _btn("Panel de Usuarios", "pages/admin.py",         "menu_admin")
+
+        st.markdown('<span class="sb-section-gap"></span>', unsafe_allow_html=True)
+        st.markdown('<p class="sb-section">Finanzas</p>', unsafe_allow_html=True)
+        _btn("Presupuestos",      "pages/presupuestos.py",  "menu_presupuestos")
 
         st.markdown('<span class="sb-section-gap"></span>', unsafe_allow_html=True)
         st.markdown('<p class="sb-section">Monitoreo</p>', unsafe_allow_html=True)
-        _btn("Logs de Acceso",   "pages/access_logs.py", "menu_access_logs")
+        _btn("Logs de Acceso",   "pages/access_logs.py",   "menu_access_logs")
     else:
         # Cliente normal o superadmin en modo vista
         st.markdown('<p class="sb-section">Principal</p>', unsafe_allow_html=True)

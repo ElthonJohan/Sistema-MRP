@@ -10,11 +10,18 @@ python-dateutil==2.9.0
 
 reportlab==4.1.0
 
+
+fpdf2==2.8.1
+
 # Opcional: si usasmos autenticación en Streamlit
 
 streamlit-authenticator==0.3.2
 
 streamlit==1.56.0
 bcrypt==5.0.0
-plotly==5.22.0   # versión estable
+plotly==5.22.0 
 
+# migracion a postgres
+psycopg2-binary
+
+python-dotenv

@@ -149,6 +149,25 @@ k4.markdown(f"""<div class="akpi ak-red">
   <div class="akpi-sub">Cuentas bloqueadas ahora</div>
 </div>""", unsafe_allow_html=True)
 
+# ── Instrucciones ─────────────────────────────────────────────────────────────
+_, _col_help_logs = st.columns([7, 1.5])
+with _col_help_logs.popover("📋 Instrucciones", use_container_width=True):
+    st.markdown("#### Guía de Logs de Acceso")
+    st.markdown("""
+**Alertas de Seguridad** — Muestra cuentas bloqueadas en tiempo real por exceder 5 intentos fallidos. El bloqueo dura 15 minutos desde el último intento.
+
+**Intentos Fallidos** — Lista todos los accesos fallidos registrados (últimos 200), con usuario, fecha, IP y razón del fallo. Exportable a CSV.
+
+**Historial de Accesos Exitosos** — Registro de todos los inicios de sesión exitosos. Exportable a CSV para auditoría.
+
+---
+
+**Reglas de seguridad:**
+- 5 intentos fallidos consecutivos → cuenta bloqueada 15 min
+- Sesiones expiran automáticamente tras 30 min de inactividad
+- Las sesiones se invalidan al deshabilitar o eliminar un cliente
+""")
+
 # ── Alertas de Seguridad ──────────────────────────────────────────────────────
 st.markdown('<div class="sec-title">&#9888; Alertas de Seguridad</div>', unsafe_allow_html=True)
 

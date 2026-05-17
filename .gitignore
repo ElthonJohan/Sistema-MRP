@@ -6,7 +6,8 @@ check.py
 mrp.db
 
 venv/
-
+*.pyc
+storage/
 
 
 .venv/
@@ -15,3 +16,8 @@ skills-lock.json
 
 *.tmp.*
 
+.streamlit/secrets.toml
+
+.env
+test_connection.py
+debug_db.py

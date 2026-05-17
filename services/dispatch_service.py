@@ -17,6 +17,10 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
     Returns (True, guia_number) on success or (False, error_message) on failure.
     """
 
+
+    if not items or len(items) == 0:
+        return False, "Debe seleccionar al menos un material y cantidad para despachar."
+
     req = db.query(Requirement).filter(
         Requirement.id == requirement_id
     ).first()
@@ -51,14 +55,19 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
         if qty > pendiente:
             return False, f"Cantidad {qty} excede lo pendiente ({pendiente}) para el material seleccionado"
 
-        inventory = db.query(Inventory).filter(
+        # Validar que el item tiene stock reservado (no está en "pending")
+        if req_item.status == "pending":
+            material_name = req_item.material.name if req_item.material else f"Material {material_id}"
+            return False, f"Material '{material_name}' no tiene stock reservado. Ve a Inventario para agregar stock al almacén principal."
+        
+        all_inv_check = db.query(Inventory).filter(
             Inventory.warehouse_id == principal.id,
             Inventory.material_id == material_id,
-        ).first()
+        ).all()
+        total_principal_stock = sum(inv.stock for inv in all_inv_check)
 
-        stock_disponible = inventory.stock if inventory else 0
-        if stock_disponible < qty:
-            return False, "Stock insuficiente en el almacén principal"
+        if total_principal_stock < qty:
+            return False, "Stock insuficiente en el almacén principal para completar el despacho"
 
     # ── Fase 2: crear despacho y aplicar cambios en un solo commit ─────────────
     now = datetime.utcnow()
@@ -84,12 +93,25 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
         if not req_item:
             continue
 
-        inventory = get_or_create_inventory(db, principal.id, material_id)
+        # Distribute stock and reserved reduction across all budget records (FIFO)
+        all_inv = db.query(Inventory).filter(
+            Inventory.warehouse_id == principal.id,
+            Inventory.material_id == material_id,
+        ).order_by(Inventory.id).all()
 
-        inventory.stock -= qty
-        inventory.reserved -= qty
-        if inventory.reserved < 0:
-            inventory.reserved = 0
+        remaining_s = qty
+        remaining_r = qty
+        for inv in all_inv:
+            if remaining_s <= 0 and remaining_r <= 0:
+                break
+            if remaining_s > 0:
+                reduce_s = min(inv.stock, remaining_s)
+                inv.stock -= reduce_s
+                remaining_s -= reduce_s
+            if remaining_r > 0:
+                reduce_r = min(inv.reserved, remaining_r)
+                inv.reserved -= reduce_r
+                remaining_r -= reduce_r
 
         req_item.fulfilled_qty += qty
         if req_item.fulfilled_qty >= req_item.requested_qty:
@@ -126,6 +148,54 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
 
 def get_dispatches(db: Session):
     return db.query(Dispatch).all()
+
+
+def cancel_dispatch(db: Session, dispatch_id):
+    dispatch = db.query(Dispatch).filter(
+        Dispatch.id == dispatch_id
+    ).first()
+
+    if not dispatch:
+        return False
+
+    _req = dispatch.requirement
+    _bud_id   = getattr(_req, "budget_id", None) if _req else None
+    _bud_name = getattr(_req, "budget_name", None) if _req else None
+    for item in dispatch.items:
+        # Revertir inventario (mismo proyecto que el requerimiento, si aplica)
+        inventory = get_or_create_inventory(
+            db, _req.warehouse_id_obra, item.material_id,
+            budget_id=_bud_id, budget_name=_bud_name,
+        )
+        inventory.stock += item.dispatched_qty
+
+        # Revertir requerimiento item
+        req_item = next(
+            (i for i in dispatch.requirement.items if i.material_id == item.material_id),
+            None
+        )
+
+        if req_item:
+            req_item.fulfilled_qty -= item.dispatched_qty
+            if req_item.fulfilled_qty < 0:
+                req_item.fulfilled_qty = 0
+
+            req_item.status = "pending" 
+            if req_item.fulfilled_qty == 0 :
+                req_item.status = "fulfilled"
+            else:
+                req_item.status = "partial"
+
+    dispatch.status = "cancelled"
+    db.commit()
+    return True
+
+
+def get_dispatch_detail(db: Session, dispatch_id):
+    return db.query(Dispatch).filter(
+        Dispatch.id == dispatch_id
+    ).first()
+
 
 
 def delete_dispatch(db: Session, dispatch_id: int, owner_id: int):
