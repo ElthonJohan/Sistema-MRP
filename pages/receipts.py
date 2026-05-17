@@ -4,6 +4,7 @@ import io, csv
 from datetime import timezone, timedelta
 from database import SessionLocal
 from services.receipt_service import create_receipt
+from services.budget_service import get_budgets
 from models.dispatch import Dispatch
 from models.requirement import Requirement
 from models.warehouse import Warehouse
@@ -80,8 +81,13 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
     font-size: .85rem; font-weight: 800; color: #fff;
 }
 .recv-name { font-size: .85rem; font-weight: 700; }
-.recv-qty  { font-size: .78rem; opacity: .65; }
+.recv-qty  { font-size: .78rem; opacity: .85; }
 .recv-done { font-size: .75rem; color: #6b7280; font-style: italic; }
+.recv-lbl {
+    font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: rgba(148,163,184,.55); margin-right: .25rem;
+}
 
 /* ── Historial de recepciones ── */
 .hist-card {
@@ -112,6 +118,39 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
     font-size: .74rem; font-weight: 700; color: #6ee7b7;
     margin: .15rem .2rem .15rem 0;
 }
+.hist-mat-pill .pill-lbl {
+    font-size: .58rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: rgba(148,163,184,.65);
+}
+.hist-mat-pill .pill-val   { color: #6ee7b7; font-weight: 700; }
+.hist-mat-pill .pill-sep   { color: rgba(148,163,184,.30); margin: 0 .15rem; }
+
+.hist-meta-row {
+    display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .42rem;
+}
+.recv-meta-chip, .recv-proj-chip {
+    display: inline-flex; align-items: baseline; gap: .35rem;
+    padding: .15rem .55rem; border-radius: 8px;
+    background: rgba(15,23,42,.40);
+    border: 1px solid rgba(255,255,255,.05);
+}
+.recv-proj-chip {
+    background: rgba(5,150,105,.10);
+    border-color: rgba(5,150,105,.25);
+}
+.recv-proj-chip.empty {
+    background: rgba(239,68,68,.06);
+    border-color: rgba(239,68,68,.18);
+}
+.recv-mini-lbl {
+    font-size: .58rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    color: rgba(148,163,184,.55);
+}
+.recv-mini-val { font-size: .72rem; font-weight: 700; color: #e2e8f0; }
+.recv-proj-chip .recv-mini-val { color: #6ee7b7; }
+.recv-proj-chip.empty .recv-mini-val { color: #fca5a5; font-style: italic; }
 .hist-recv-info {
     min-width: 140px; display: flex; flex-direction: column;
     align-items: flex-end; gap: .18rem; text-align: right;
@@ -166,8 +205,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Instrucciones ─────────────────────────────────────────────────────────────
-_, _col_help = st.columns([6, 1])
+# ── Instrucciones + Presupuestos Activos ──────────────────────────────────────
+_, _col_budgets, _col_help = st.columns([4.6, 1.5, 1])
+with _col_budgets.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
     st.markdown("#### Recepciones — Guía de uso")
     st.markdown("""
@@ -203,17 +257,59 @@ else:
 
     if dispatch and dispatch.items:
         has_pending = False
+        recv_cost_total = 0.0
+
+        # Header con proyecto + obra del despacho
+        _disp_req   = dispatch.requirement
+        _disp_proj  = getattr(_disp_req, "budget_name", None) if _disp_req else None
+        _disp_obra  = wh_id_name.get(_disp_req.warehouse_id_obra, f"Almacén #{_disp_req.warehouse_id_obra}") if _disp_req else "—"
+        _proj_chip  = (
+            f"<span class='recv-proj-chip'><span class='recv-mini-lbl'>Proyecto:</span>"
+            f"<span class='recv-mini-val'>{_disp_proj}</span></span>"
+            if _disp_proj else
+            "<span class='recv-proj-chip empty'>"
+            "<span class='recv-mini-lbl'>Proyecto:</span>"
+            "<span class='recv-mini-val'>— sin proyecto —</span></span>"
+        )
+        st.markdown(
+            "<div class='hist-meta-row' style='margin-bottom:.7rem'>"
+              f"<span class='recv-meta-chip'><span class='recv-mini-lbl'>Despacho:</span>"
+              f"<span class='recv-mini-val'>{dispatch.guia_number or f'#{dispatch.id}'}</span></span>"
+              f"<span class='recv-meta-chip'><span class='recv-mini-lbl'>Obra:</span>"
+              f"<span class='recv-mini-val'>{_disp_obra}</span></span>"
+              f"{_proj_chip}"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
         for item in dispatch.items:
-            mat_name = item.material.name if item.material else f"Material {item.material_id}"
-            init     = mat_name[0].upper()
+            mat_name     = item.material.name if item.material else f"Material {item.material_id}"
+            mat_unit     = (item.material.unit or "").strip() if item.material else ""
+            unit_price   = float(item.material.unit_price or 0) if item.material else 0.0
+            unit_price_d = float(item.material.unit_price_dolares or 0) if item.material else 0.0
+            item_cost    = item.dispatched_qty * unit_price
+            item_cost_d  = item.dispatched_qty * unit_price_d
+            init         = mat_name[0].upper()
+            qty_lbl      = mat_unit if mat_unit else "uds"
             if item.dispatched_qty > 0:
                 has_pending = True
+                recv_cost_total += item_cost
+                _ps  = f"<span class='pill-lbl'>Precio S/.:</span> <span class='pill-val'>S/ {unit_price:,.2f}</span>" if unit_price > 0 else ""
+                _pd  = f"<span class='pill-lbl' style='margin-left:.4rem'>Precio $:</span> <span class='pill-val'>$ {unit_price_d:,.2f}</span>" if unit_price_d > 0 else ""
+                _cst = (
+                    f"<div style='font-size:.72rem;color:rgba(148,163,184,.65);margin-top:.18rem'>"
+                    f"{_ps}{_pd}"
+                    + (f" <span class='pill-lbl' style='margin-left:.55rem'>Total:</span> <span style='color:#fbbf24;font-weight:700'>S/ {item_cost:,.2f}</span>" if unit_price > 0 else "")
+                    + (f" <span class='pill-lbl' style='margin-left:.35rem'>/</span> <span style='color:#60a5fa;font-weight:700'>$ {item_cost_d:,.2f}</span>" if unit_price_d > 0 else "")
+                    + "</div>"
+                )
                 st.markdown(f"""
                 <div class="recv-item">
                   <div class="recv-icon">{init}</div>
-                  <div>
-                    <div class="recv-name">{mat_name}</div>
-                    <div class="recv-qty">Cantidad despachada: <b>{item.dispatched_qty}</b> {item.material.unit if item.material else ""}</div>
+                  <div style="flex:1">
+                    <div class="recv-name"><span class="recv-lbl">Nombre:</span> {mat_name}</div>
+                    <div class="recv-qty"><span class="recv-lbl">Cantidad:</span> <b>{item.dispatched_qty}</b> {qty_lbl}</div>
+                    {_cst}
                   </div>
                 </div>""", unsafe_allow_html=True)
             else:
@@ -221,10 +317,21 @@ else:
                 <div class="recv-item" style="opacity:.45">
                   <div class="recv-icon" style="background:linear-gradient(135deg,#374151,#6b7280)">{init}</div>
                   <div>
-                    <div class="recv-name">{mat_name}</div>
+                    <div class="recv-name"><span class="recv-lbl">Nombre:</span> {mat_name}</div>
                     <div class="recv-done">Ya recibido anteriormente</div>
                   </div>
                 </div>""", unsafe_allow_html=True)
+
+        if recv_cost_total > 0 and has_pending:
+            st.markdown(f"""
+<div style="display:flex;justify-content:flex-end;align-items:center;gap:.6rem;
+            margin:.3rem 0 .5rem;padding:.5rem 1rem;border-radius:10px;
+            border:1px solid rgba(251,191,36,.22);background:rgba(251,191,36,.05)">
+  <span style="font-size:.72rem;color:rgba(148,163,184,.55);font-weight:600">
+    Costo total de materiales a recibir
+  </span>
+  <span style="font-size:.95rem;font-weight:900;color:#fbbf24">S/ {recv_cost_total:,.2f}</span>
+</div>""", unsafe_allow_html=True)
 
 
 # -------------------------
@@ -287,25 +394,81 @@ received_dispatches = (
 if not received_dispatches:
     st.info("Aún no hay recepciones registradas.")
 else:
+    # ── Filtros ───────────────────────────────────────────────────────────────
+    _obra_options = ["Todas"] + sorted({
+        wh_id_name.get(d.requirement.warehouse_id_obra, f"Almacén #{d.requirement.warehouse_id_obra}")
+        for d in received_dispatches if d.requirement
+    })
+    _proj_options = ["Todos"] + sorted({
+        (d.requirement.budget_name if d.requirement and d.requirement.budget_name else "— sin proyecto —")
+        for d in received_dispatches
+    })
+
+    _rf1, _rf2, _rf3, _rf4, _rf5 = st.columns([1.8, 1.8, 1.5, 1.5, 1.8], gap="small")
+    _rf_obra = _rf1.selectbox("Obra", _obra_options, key="recv_hist_f_obra")
+    _rf_proj = _rf2.selectbox("Proyecto", _proj_options, key="recv_hist_f_proj")
+    _rf_from = _rf3.date_input("Desde", value=None, key="recv_hist_f_from")
+    _rf_to   = _rf4.date_input("Hasta", value=None, key="recv_hist_f_to")
+    _rf_guia = _rf5.text_input(
+        "Guía", value="", key="recv_hist_f_guia",
+        placeholder="Buscar por nº de guía...",
+    )
+
+    _filtered_recv = received_dispatches
+    if _rf_obra != "Todas":
+        _filtered_recv = [
+            d for d in _filtered_recv
+            if d.requirement and wh_id_name.get(d.requirement.warehouse_id_obra, "") == _rf_obra
+        ]
+    if _rf_proj != "Todos":
+        if _rf_proj == "— sin proyecto —":
+            _filtered_recv = [d for d in _filtered_recv if not (d.requirement and d.requirement.budget_name)]
+        else:
+            _filtered_recv = [d for d in _filtered_recv if d.requirement and d.requirement.budget_name == _rf_proj]
+    if _rf_from:
+        _filtered_recv = [
+            d for d in _filtered_recv
+            if d.receipt and d.receipt.receipt_date and d.receipt.receipt_date.date() >= _rf_from
+        ]
+    if _rf_to:
+        _filtered_recv = [
+            d for d in _filtered_recv
+            if d.receipt and d.receipt.receipt_date and d.receipt.receipt_date.date() <= _rf_to
+        ]
+    if _rf_guia.strip():
+        _q = _rf_guia.strip().lower()
+        _filtered_recv = [d for d in _filtered_recv if (d.guia_number or "").lower().find(_q) >= 0]
+
+    st.caption(
+        f"{len(_filtered_recv)} recepci{'ones' if len(_filtered_recv) != 1 else 'ón'} encontrada{'s' if len(_filtered_recv) != 1 else ''} "
+        f"(de {len(received_dispatches)} total{'es' if len(received_dispatches) != 1 else ''})."
+    )
+
+    if not _filtered_recv:
+        st.info("No se encontraron recepciones con los filtros aplicados.")
+        db.close()
+        st.stop()
+
     RECV_PG   = 10
-    total_r   = len(received_dispatches)
+    total_r   = len(_filtered_recv)
     total_rp  = max(1, (total_r + RECV_PG - 1) // RECV_PG)
     recv_pg   = st.session_state.get("recv_hist_page", 1)
     recv_pg   = max(1, min(recv_pg, total_rp))
-    page_recv = received_dispatches[(recv_pg - 1) * RECV_PG: recv_pg * RECV_PG]
+    page_recv = _filtered_recv[(recv_pg - 1) * RECV_PG: recv_pg * RECV_PG]
 
-    # ── CSV download + pagination controls ────────────────────────────────────
+    # ── CSV download + pagination controls (respeta los filtros) ─────────────
     _csv_buf = io.StringIO()
     _csv_w   = csv.writer(_csv_buf)
-    _csv_w.writerow(["Guía", "Req.", "Almacén Obra", "Material", "Unidad", "Cantidad", "Fecha Despacho", "Fecha Recepción"])
-    for _d in received_dispatches:
+    _csv_w.writerow(["Guía", "Req.", "Almacén Obra", "Proyecto", "Material", "Unidad", "Cantidad", "Fecha Despacho", "Fecha Recepción"])
+    for _d in _filtered_recv:
         _rec      = _d.receipt
         _obra_n   = wh_id_name.get(_d.requirement.warehouse_id_obra, f"Almacén #{_d.requirement.warehouse_id_obra}")
         _dd       = _fmt_lima(_d.dispatch_date)
         _rd       = _fmt_lima(_rec.receipt_date) if _rec else ""
+        _proj_n = (_d.requirement.budget_name or "") if _d.requirement else ""
         for _it in _d.items:
             _csv_w.writerow([
-                _d.guia_number, _d.requirement_id, _obra_n,
+                _d.guia_number, _d.requirement_id, _obra_n, _proj_n,
                 (_it.material.name if _it.material else f"Material {_it.material_id}"),
                 (_it.material.unit if _it.material else ""),
                 _it.dispatched_qty, _dd, _rd,
@@ -345,13 +508,39 @@ else:
         disp_date  = _fmt_lima(d.dispatch_date) or "—"
         recv_date  = _fmt_lima(receipt.receipt_date) if receipt else "—"
 
+        recv_total_cost = sum(
+            it.dispatched_qty * float(it.material.unit_price or 0)
+            for it in d.items if it.material
+        )
+
         mats_html = "".join(
             f"<span class='hist-mat-pill'>"
-            f"{it.material.name if it.material else f'Mat.{it.material_id}'}"
-            f"&nbsp;<strong>{it.dispatched_qty}</strong>"
-            f"{(' ' + it.material.unit) if it.material and it.material.unit else ''}"
+            f"<span class='pill-lbl'>Nombre:</span>"
+            f"<span class='pill-val'>{it.material.name if it.material else f'Mat.{it.material_id}'}</span>"
+            f"<span class='pill-sep'>·</span>"
+            f"<span class='pill-lbl'>Cant.:</span>"
+            f"<span class='pill-val'>{it.dispatched_qty}"
+            f"{(' ' + it.material.unit) if it.material and it.material.unit else ''}</span>"
             f"</span>"
             for it in d.items
+        )
+
+        cost_badge = (
+            f"<div style='margin-top:.35rem;display:inline-flex;align-items:center;gap:.3rem;"
+            f"background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.22);"
+            f"border-radius:8px;padding:.18rem .55rem;font-size:.70rem;font-weight:700;color:#fbbf24'>"
+            f"<span class='recv-mini-lbl'>Costo total:</span> S/ {recv_total_cost:,.2f}</div>"
+            if recv_total_cost > 0 else ""
+        )
+
+        _h_proj = getattr(d.requirement, "budget_name", None) if d.requirement else None
+        _proj_chip_h = (
+            f"<span class='recv-proj-chip'><span class='recv-mini-lbl'>Proyecto:</span>"
+            f"<span class='recv-mini-val'>{_h_proj}</span></span>"
+            if _h_proj else
+            "<span class='recv-proj-chip empty'>"
+            "<span class='recv-mini-lbl'>Proyecto:</span>"
+            "<span class='recv-mini-val'>— sin proyecto —</span></span>"
         )
 
         st.markdown(f"""
@@ -359,14 +548,20 @@ else:
   <div class="hist-guia">
     <div class="hist-label">Guía</div>
     <div class="hist-guia-num">{d.guia_number or f'Despacho #{d.id}'}</div>
-    <div class="hist-guia-date">Despachado: {disp_date}</div>
+    <div class="hist-label" style="margin-top:.32rem">Despachado</div>
+    <div class="hist-guia-date">{disp_date}</div>
   </div>
   <div class="hist-mats">
     <div class="hist-label" style="margin-bottom:.3rem">Materiales recibidos</div>
     {mats_html if mats_html else '<span style="font-size:.75rem;color:rgba(148,163,184,.40)">Sin ítems</span>'}
-    <div style="font-size:.68rem;color:rgba(148,163,184,.40);margin-top:.35rem">
-      Req. #{d.requirement_id} &nbsp;·&nbsp; {obra_name}
+    <div class="hist-meta-row">
+      <span class="recv-meta-chip"><span class="recv-mini-lbl">Req.:</span>
+        <span class="recv-mini-val">#{d.requirement_id}</span></span>
+      <span class="recv-meta-chip"><span class="recv-mini-lbl">Obra:</span>
+        <span class="recv-mini-val">{obra_name}</span></span>
+      {_proj_chip_h}
     </div>
+    {cost_badge}
   </div>
   <div class="hist-recv-info">
     <div class="hist-recv-check">✓</div>

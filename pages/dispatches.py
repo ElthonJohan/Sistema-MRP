@@ -4,6 +4,7 @@ import io, csv
 from datetime import timezone, timedelta
 from database import SessionLocal
 from services.dispatch_service import create_dispatch, delete_dispatch
+from services.budget_service import get_budgets
 from models.dispatch import Dispatch
 from models.requirement import Requirement
 from models.warehouse import Warehouse
@@ -20,14 +21,20 @@ def _fmt_lima(dt):
     return dt.replace(tzinfo=timezone.utc).astimezone(_LIMA).strftime("%d/%m/%Y %H:%M")
 
 def _build_guia_html(dispatch, req_id, obra_name, principal_name, disp_date_str):
+    def _price(it):
+        return float(it.material.unit_price or 0) if it.material else 0.0
     rows = "".join(
         f"<tr><td>{i+1}</td>"
         f"<td>{(it.material.name if it.material else f'Material {it.material_id}')}</td>"
         f"<td>{(it.material.unit if it.material else '')}</td>"
-        f"<td style='text-align:right'>{it.dispatched_qty}</td></tr>"
+        f"<td style='text-align:right'>{it.dispatched_qty}</td>"
+        f"<td style='text-align:right'>{'S/ ' + f'{_price(it):,.2f}' if _price(it) > 0 else '—'}</td>"
+        f"<td style='text-align:right'>{'S/ ' + f'{it.dispatched_qty * _price(it):,.2f}' if _price(it) > 0 else '—'}</td>"
+        f"</tr>"
         for i, it in enumerate(dispatch.items)
     )
-    total_qty = sum(it.dispatched_qty for it in dispatch.items)
+    total_qty  = sum(it.dispatched_qty for it in dispatch.items)
+    total_cost = sum(it.dispatched_qty * _price(it) for it in dispatch.items)
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -80,10 +87,10 @@ tr:nth-child(even) td{{background:#f8fafc}}
   </div>
 </div>
 <table>
-  <thead><tr><th>#</th><th>Material</th><th>Unidad</th><th style="text-align:right">Cantidad</th></tr></thead>
+  <thead><tr><th>#</th><th>Material</th><th>Unidad</th><th style="text-align:right">Cantidad</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Total</th></tr></thead>
   <tbody>
     {rows}
-    <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right">{total_qty}</td></tr>
+    <tr class="total-row"><td colspan="3">TOTAL</td><td style="text-align:right">{total_qty}</td><td></td><td style="text-align:right">{'S/ ' + f'{total_cost:,.2f}' if total_cost > 0 else '—'}</td></tr>
   </tbody>
 </table>
 <div class="sign-grid">
@@ -190,6 +197,39 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
     font-size: .72rem; font-weight: 700; color: #93c5fd;
     margin: .1rem .2rem .1rem 0;
 }
+.hist-mat-pill .pill-lbl {
+    font-size: .60rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em;
+    color: rgba(148,163,184,.65);
+}
+.hist-mat-pill .pill-val { color: #93c5fd; font-weight: 700; }
+.hist-mat-pill .pill-sep { color: rgba(148,163,184,.30); margin: 0 .1rem; }
+
+.disp-hist-meta {
+    display: flex; gap: .35rem; flex-wrap: wrap; margin-top: .42rem;
+}
+.hist-meta-chip, .disp-proj-chip {
+    display: inline-flex; align-items: baseline; gap: .35rem;
+    padding: .15rem .55rem; border-radius: 8px;
+    background: rgba(15,23,42,.40);
+    border: 1px solid rgba(255,255,255,.05);
+}
+.disp-proj-chip {
+    background: rgba(5,150,105,.10);
+    border-color: rgba(5,150,105,.25);
+}
+.disp-proj-chip.empty {
+    background: rgba(239,68,68,.06);
+    border-color: rgba(239,68,68,.18);
+}
+.hist-mini-lbl {
+    font-size: .58rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    color: rgba(148,163,184,.55);
+}
+.hist-mini-val { font-size: .72rem; font-weight: 700; color: #e2e8f0; }
+.disp-proj-chip .hist-mini-val { color: #6ee7b7; }
+.disp-proj-chip.empty .hist-mini-val { color: #fca5a5; font-style: italic; }
 
 /* ── Delete confirm strip ── */
 .del-confirm-strip {
@@ -200,6 +240,134 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
     margin-bottom: .4rem; flex-wrap: wrap;
 }
 .del-confirm-strip span { flex: 1; font-size: .82rem; color: #fca5a5; font-weight: 600; }
+
+/* ── Cabecera de "Materiales a Despachar" ── */
+.disp-hdr {
+    display: flex; gap: .5rem; flex-wrap: wrap;
+    margin: .2rem 0 1rem;
+}
+.disp-hdr-chip {
+    display: inline-flex; align-items: baseline; gap: .45rem;
+    padding: .32rem .72rem; border-radius: 10px;
+    background: rgba(37,99,235,.07);
+    border: 1px solid rgba(37,99,235,.18);
+}
+.disp-hdr-chip.disp-hdr-proj {
+    background: rgba(5,150,105,.10);
+    border-color: rgba(5,150,105,.28);
+}
+.disp-hdr-chip.disp-hdr-proj-empty {
+    background: rgba(239,68,68,.08);
+    border-color: rgba(239,68,68,.22);
+}
+.disp-hdr-lbl {
+    font-size: .60rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: rgba(148,163,184,.55);
+}
+.disp-hdr-val { font-size: .82rem; font-weight: 800; color: #e2e8f0; }
+.disp-hdr-chip.disp-hdr-proj .disp-hdr-val { color: #6ee7b7; }
+.disp-hdr-chip.disp-hdr-proj-empty .disp-hdr-val { color: #fca5a5; font-style: italic; }
+
+/* ── Tarjeta de ítem a despachar ── */
+.disp-item-card {
+    padding: .75rem 1.1rem; border-radius: 13px;
+    border: 1px solid rgba(37,99,235,.18);
+    background: linear-gradient(135deg, rgba(37,99,235,.06), rgba(79,70,229,.03));
+    margin-bottom: .35rem;
+}
+.disp-item-card.disp-item-nostock {
+    border-color: rgba(239,68,68,.30);
+    background: linear-gradient(135deg, rgba(239,68,68,.07), rgba(220,38,38,.03));
+}
+.disp-item-name {
+    font-weight: 800; color: #f1f5f9; font-size: .95rem;
+    padding-bottom: .4rem; margin-bottom: .55rem;
+    border-bottom: 1px solid rgba(37,99,235,.14);
+}
+.disp-item-card.disp-item-nostock .disp-item-name { color: #fca5a5; }
+.disp-item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: .45rem .8rem;
+}
+.disp-item-field {
+    display: flex; flex-direction: column; gap: .12rem;
+    padding: .3rem .55rem;
+    border-radius: 8px;
+    background: rgba(15,23,42,.30);
+    border: 1px solid rgba(255,255,255,.04);
+}
+.disp-item-lbl {
+    font-size: .58rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: rgba(148,163,184,.55);
+}
+.disp-item-val { font-size: .85rem; font-weight: 800; color: #e2e8f0; line-height: 1.2; }
+.disp-item-val em { font-style: normal; opacity: .55; font-weight: 600; font-size: .75rem; }
+.disp-item-val.pend     { color: #fbbf24; }
+.disp-item-val.price-s  { color: #34d399; }
+.disp-item-val.price-d  { color: #60a5fa; }
+.disp-item-warn {
+    margin-top: .55rem; padding: .4rem .7rem;
+    border-radius: 8px; font-size: .74rem; font-weight: 700;
+    color: #f87171; background: rgba(239,68,68,.10);
+    border: 1px solid rgba(239,68,68,.22);
+}
+
+/* Cantidad a despachar */
+.disp-qty-lbl {
+    font-size: .68rem; font-weight: 700; color: rgba(148,163,184,.65);
+    text-transform: uppercase; letter-spacing: .06em;
+    padding: .55rem 0 0 .4rem;
+}
+.disp-qty-nostock {
+    padding: .55rem .8rem; border-radius: 10px;
+    border: 1px solid rgba(239,68,68,.30);
+    background: rgba(239,68,68,.05);
+    text-align: center; font-size: .82rem;
+    font-weight: 700; color: #f87171;
+}
+.disp-qty-totalbox {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: .6rem; padding: .55rem .9rem; border-radius: 10px;
+    border: 1px solid rgba(251,191,36,.22);
+    background: rgba(251,191,36,.05);
+    flex-wrap: wrap;
+}
+.disp-qty-totalbox.empty {
+    border-color: rgba(148,163,184,.18);
+    background: rgba(148,163,184,.05);
+    color: rgba(148,163,184,.40); justify-content: center;
+}
+.disp-qty-totallbl {
+    font-size: .65rem; font-weight: 700;
+    color: rgba(148,163,184,.65);
+    text-transform: uppercase; letter-spacing: .06em;
+    margin-right: auto;
+}
+.disp-qty-s { font-size: .92rem; font-weight: 900; color: #fbbf24; }
+.disp-qty-d { font-size: .92rem; font-weight: 900; color: #60a5fa; }
+.disp-qty-empty { font-size: .76rem; color: rgba(148,163,184,.45); font-style: italic; }
+
+.disp-total-bar {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: .9rem; margin: .35rem 0 .6rem;
+    padding: .6rem 1.1rem; border-radius: 10px;
+    border: 1px solid rgba(251,191,36,.24);
+    background: rgba(251,191,36,.05);
+    flex-wrap: wrap;
+}
+.disp-total-lbl { font-size: .74rem; color: rgba(148,163,184,.65); font-weight: 600; margin-right: auto; }
+.disp-total-s   { font-size: 1rem; font-weight: 900; color: #fbbf24; }
+.disp-total-d   { font-size: 1rem; font-weight: 900; color: #60a5fa; }
+
+/* badge-pending para cabecera */
+.badge-pending {
+    display:inline-block; padding:.18rem .65rem; border-radius:20px;
+    font-size:.70rem; font-weight:700;
+    background:rgba(234,179,8,.18); color:#fbbf24;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -257,8 +425,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Instrucciones ─────────────────────────────────────────────────────────────
-_, _col_help = st.columns([6, 1])
+# ── Instrucciones + Presupuestos Activos ──────────────────────────────────────
+_, _col_budgets, _col_help = st.columns([4.6, 1.5, 1])
+with _col_budgets.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
     st.markdown("#### Despachos — Guía de uso")
     st.markdown("""
@@ -295,32 +478,38 @@ else:
     if req:
         st.markdown('<div class="sec-title">Materiales a Despachar</div>', unsafe_allow_html=True)
 
-
-            # Info row
+        # Cabecera con proyecto + obra + estado
         _badge_cls  = "badge-partial" if req.status == "partial" else "badge-pending"
         _badge_txt  = "Parcial" if req.status == "partial" else "Pendiente"
+        _req_obra   = wh_id_to_name.get(req.warehouse_id_obra, f"Almacén #{req.warehouse_id_obra}")
+        _req_proj   = getattr(req, "budget_name", None)
+        _proj_chip  = (
+            f'<span class="disp-hdr-chip disp-hdr-proj">'
+            f'<span class="disp-hdr-lbl">Proyecto</span>'
+            f'<span class="disp-hdr-val">{_req_proj}</span></span>'
+            if _req_proj else
+            '<span class="disp-hdr-chip disp-hdr-proj-empty">'
+            '<span class="disp-hdr-lbl">Proyecto</span>'
+            '<span class="disp-hdr-val">— sin proyecto —</span></span>'
+        )
         st.markdown(
-                f"<div style='margin-bottom:1rem;font-size:.82rem;color:rgba(148,163,184,.65)'>"
-                f"Requerimiento <strong style='color:#93c5fd'>#{req.id}</strong> &nbsp;·&nbsp; "
-                f"<span class='{_badge_cls}'>{_badge_txt}</span></div>",
-                unsafe_allow_html=True,
-            )
-
-            # Column headers
-        h1, h2, h3 = st.columns([5, 2, 2], gap="small")
-        h1.markdown("<div style='font-size:.67rem;font-weight:700;color:rgba(148,163,184,.45);"
-                        "text-transform:uppercase;letter-spacing:.06em;padding:.2rem .4rem'>Material</div>",
-                        unsafe_allow_html=True)
-        h2.markdown("<div style='font-size:.67rem;font-weight:700;color:rgba(148,163,184,.45);"
-                        "text-transform:uppercase;letter-spacing:.06em;padding:.2rem .4rem;text-align:center'>Pendiente</div>",
-                        unsafe_allow_html=True)
-        h3.markdown("<div style='font-size:.67rem;font-weight:700;color:rgba(148,163,184,.45);"
-                        "text-transform:uppercase;letter-spacing:.06em;padding:.2rem .4rem;text-align:center'>A Despachar</div>",
-                        unsafe_allow_html=True)
+            '<div class="disp-hdr">'
+              f'<span class="disp-hdr-chip"><span class="disp-hdr-lbl">Requerimiento</span>'
+              f'<span class="disp-hdr-val">#{req.id}</span></span>'
+              f'{_proj_chip}'
+              f'<span class="disp-hdr-chip"><span class="disp-hdr-lbl">Almacén obra</span>'
+              f'<span class="disp-hdr-val">{_req_obra}</span></span>'
+              f'<span class="disp-hdr-chip"><span class="disp-hdr-lbl">Estado</span>'
+              f'<span class="disp-hdr-val"><span class="{_badge_cls}">{_badge_txt}</span></span></span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
         items         = []
         has_pending   = False  # ítems sin stock (no se pueden despachar aún)
         has_remaining = False  # ítems con saldo pendiente de despacho
+        disp_cost_total   = 0.0
+        disp_cost_total_d = 0.0
 
         for i, item in enumerate(req.items):
             pendiente   = item.requested_qty - item.fulfilled_qty
@@ -329,50 +518,85 @@ else:
                 continue
 
             has_remaining = True
-            mat_name = item.material.name if item.material else f"Material {item.material_id}"
-            mat_unit = item.material.unit if item.material else ""
+            mat_name     = item.material.name if item.material else f"Material {item.material_id}"
+            mat_unit     = (item.material.unit or "").strip() if item.material else ""
+            unit_price   = float(item.material.unit_price or 0) if item.material else 0.0
+            unit_price_d = float(item.material.unit_price_dolares or 0) if item.material else 0.0
+            qty_lbl      = mat_unit if mat_unit else "uds"
 
-            col_mat, col_pend, col_qty = st.columns([5, 2, 2], gap="small")
+            # Bloque visual del material (1 línea con labels)
+            st.markdown(
+                f'<div class="disp-item-card {"disp-item-nostock" if sin_stock else ""}">'
+                  f'<div class="disp-item-name">{mat_name}</div>'
+                  '<div class="disp-item-grid">'
+                    f'<div class="disp-item-field"><span class="disp-item-lbl">Cantidad pendiente</span>'
+                    f'<span class="disp-item-val pend">{pendiente}</span></div>'
+                    f'<div class="disp-item-field"><span class="disp-item-lbl">Unidad</span>'
+                    f'<span class="disp-item-val">{qty_lbl}</span></div>'
+                    f'<div class="disp-item-field"><span class="disp-item-lbl">Precio unit. S/.</span>'
+                    f'<span class="disp-item-val price-s">{"S/ " + f"{unit_price:,.2f}" if unit_price > 0 else "—"}</span></div>'
+                    f'<div class="disp-item-field"><span class="disp-item-lbl">Precio unit. $</span>'
+                    f'<span class="disp-item-val price-d">{"$ " + f"{unit_price_d:,.2f}" if unit_price_d > 0 else "—"}</span></div>'
+                  '</div>'
+                + (
+                    '<div class="disp-item-warn">⚠ Sin stock reservado — agrega stock en Inventario.</div>'
+                    if sin_stock else ""
+                ) + '</div>',
+                unsafe_allow_html=True,
+            )
 
-            col_mat.markdown(f"""
-    <div style="padding:.62rem 1rem;border-radius:11px;
-                border:1px solid {'rgba(239,68,68,.18)' if sin_stock else 'rgba(37,99,235,.15)'};
-                background:{'rgba(239,68,68,.05)' if sin_stock else 'rgba(37,99,235,.06)'};
-                margin-bottom:.3rem">
-    <div style="font-weight:800;color:{'#fca5a5' if sin_stock else '#e2e8f0'};font-size:.87rem">{mat_name}</div>
-    <div style="font-size:.70rem;margin-top:.2rem;color:{'#f87171' if sin_stock else 'rgba(148,163,184,.45)'}">
-        {'⚠ Sin stock reservado — agrega stock en Inventario' if sin_stock else mat_unit}
-    </div>
-    </div>""", unsafe_allow_html=True)
-
-            col_pend.markdown(f"""
-    <div style="padding:.62rem .8rem;border-radius:11px;
-                border:1px solid {'rgba(239,68,68,.18)' if sin_stock else 'rgba(234,179,8,.20)'};
-                background:{'rgba(239,68,68,.05)' if sin_stock else 'rgba(234,179,8,.07)'};
-                text-align:center;margin-bottom:.3rem">
-    <div style="font-weight:900;color:{'#f87171' if sin_stock else '#fbbf24'};font-size:1.1rem;line-height:1">{pendiente}</div>
-    <div style="font-size:.66rem;color:rgba(148,163,184,.45);margin-top:.2rem">{mat_unit}</div>
-    </div>""", unsafe_allow_html=True)
+            # Fila de cantidad a despachar
+            qcol_lbl, qcol_input, qcol_total = st.columns([2, 2, 3], gap="small")
+            qcol_lbl.markdown(
+                '<div class="disp-qty-lbl">Cantidad a despachar</div>',
+                unsafe_allow_html=True,
+            )
 
             if sin_stock:
                 has_pending = True
-                col_qty.markdown(
-                        "<div style='padding:.62rem .8rem;border-radius:11px;"
-                        "border:1px solid rgba(239,68,68,.15);background:rgba(239,68,68,.04);"
-                        "text-align:center;font-size:.75rem;color:#f87171;font-weight:700;"
-                        "margin-bottom:.3rem'>Sin stock</div>",
-                        unsafe_allow_html=True,
-                    )
+                qcol_input.markdown(
+                    "<div class='disp-qty-nostock'>Sin stock</div>",
+                    unsafe_allow_html=True,
+                )
+                qcol_total.markdown(
+                    "<div class='disp-qty-totalbox empty'>—</div>",
+                    unsafe_allow_html=True,
+                )
             else:
-                with col_qty:
+                with qcol_input:
                     qty = st.number_input(
-                            "Cantidad",
-                            min_value=0, max_value=pendiente, value=pendiente,
-                            key=f"disp_qty_{i}_{item.material_id}",
-                            label_visibility="collapsed",
-                        )
+                        "Cantidad",
+                        min_value=0, max_value=pendiente, value=pendiente,
+                        key=f"disp_qty_{i}_{item.material_id}",
+                        label_visibility="collapsed",
+                    )
                     if qty > 0:
                         items.append({"material_id": item.material_id, "qty": qty})
+
+                item_total   = qty * unit_price
+                item_total_d = qty * unit_price_d
+                disp_cost_total   += item_total
+                disp_cost_total_d += item_total_d
+                _it_s = f'<span class="disp-qty-s">S/ {item_total:,.2f}</span>' if unit_price > 0 else ""
+                _it_d = f'<span class="disp-qty-d">$ {item_total_d:,.2f}</span>' if unit_price_d > 0 else ""
+                _it_body = (_it_s + _it_d) or "<span class='disp-qty-empty'>Sin precio</span>"
+                qcol_total.markdown(
+                    f"<div class='disp-qty-totalbox'><span class='disp-qty-totallbl'>Costo</span>{_it_body}</div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='margin-bottom:.55rem'></div>", unsafe_allow_html=True)
+
+        if (disp_cost_total > 0 or disp_cost_total_d > 0) and has_remaining:
+            _ts = f'<span class="disp-total-s">S/ {disp_cost_total:,.2f}</span>' if disp_cost_total > 0 else ""
+            _td = f'<span class="disp-total-d">$ {disp_cost_total_d:,.2f}</span>' if disp_cost_total_d > 0 else ""
+            st.markdown(
+                '<div class="disp-total-bar">'
+                  '<span class="disp-total-lbl">Costo total estimado del despacho</span>'
+                  f'{_ts}{_td}'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
             if not has_remaining:
                 st.info("Todos los ítems de este requerimiento ya han sido despachados.")
@@ -383,12 +607,6 @@ else:
                         "Ve a **Inventario** y agrega stock al almacén principal; "
                         "el sistema reservará automáticamente los materiales pendientes."
                     )
-                else:
-                    if has_pending:
-                        st.info(
-                            "Algunos ítems están sin stock y no se incluirán en el despacho. "
-                            "Puedes despachar los ítems disponibles ahora."
-                        )
         # Usamos una clave única que incluya el ID del requerimiento para evitar duplicados
         if st.button("Generar Despacho", type="primary", key=f"btn_gen_disp_{req.id}", use_container_width=False):
             if not items:
@@ -470,11 +688,23 @@ else:
         if not confirming:
             pills_html = "".join(
                 f"<span class='hist-mat-pill'>"
-                f"{(it.material.name if it.material else f'Mat.{it.material_id}')}"
-                f" <strong>{it.dispatched_qty}</strong>"
-                f"{(' ' + it.material.unit) if it.material and it.material.unit else ''}"
+                f"<span class='pill-lbl'>Nombre:</span>"
+                f"<span class='pill-val'>{(it.material.name if it.material else f'Mat.{it.material_id}')}</span>"
+                f"<span class='pill-sep'>·</span>"
+                f"<span class='pill-lbl'>Cant.:</span>"
+                f"<span class='pill-val'>{it.dispatched_qty}"
+                f"{(' ' + it.material.unit) if it.material and it.material.unit else ''}</span>"
                 f"</span>"
                 for it in dispatch.items
+            )
+            proj_name_h = getattr(req_d, "budget_name", None)
+            proj_html   = (
+                f"<span class='disp-proj-chip'><span class='hist-mini-lbl'>Proyecto:</span>"
+                f"<span class='hist-mini-val'>{proj_name_h}</span></span>"
+                if proj_name_h else
+                "<span class='disp-proj-chip empty'>"
+                "<span class='hist-mini-lbl'>Proyecto:</span>"
+                "<span class='hist-mini-val'>— sin proyecto —</span></span>"
             )
 
             col_card, col_pdf, col_del = st.columns([7, 1, 1], gap="small")
@@ -484,13 +714,18 @@ else:
   <div class="disp-hist-guia">
     <div class="disp-hist-lbl">Guía de Remisión</div>
     <div class="disp-hist-num">{dispatch.guia_number or f'Despacho #{dispatch.id}'}</div>
+    <div class="disp-hist-lbl" style="margin-top:.35rem">Fecha</div>
     <div class="disp-hist-date">{disp_date_str} (Lima)</div>
   </div>
   <div class="disp-hist-mats">
     <div class="disp-hist-lbl" style="margin-bottom:.25rem">Materiales</div>
     {pills_html or '<span style="font-size:.72rem;color:rgba(148,163,184,.35)">Sin ítems</span>'}
-    <div style="font-size:.66rem;color:rgba(148,163,184,.38);margin-top:.3rem">
-      Req. #{dispatch.requirement_id} &nbsp;·&nbsp; {obra_name}
+    <div class="disp-hist-meta">
+      <span class="hist-meta-chip"><span class="hist-mini-lbl">Req.:</span>
+        <span class="hist-mini-val">#{dispatch.requirement_id}</span></span>
+      <span class="hist-meta-chip"><span class="hist-mini-lbl">Obra:</span>
+        <span class="hist-mini-val">{obra_name}</span></span>
+      {proj_html}
     </div>
   </div>
   <div class="disp-hist-status">

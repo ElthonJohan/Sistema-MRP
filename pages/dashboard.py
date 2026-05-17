@@ -12,6 +12,7 @@ from services.dashboard_service import (
     get_movements_last_7_days,
     get_top_materials_by_movement,
 )
+from services.budget_service import get_budgets, get_dispatch_costs
 from utils.auth import require_login, get_current_user_id
 from utils.navbar import render_navbar, render_sidebar_menu
 
@@ -21,16 +22,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+render_navbar()   # oculta el nav nativo antes de cualquier query DB
 require_login()
 
-# ── Tema (sincronizado con session_state) ─────────────────────────────────────
-_dark  = st.session_state.get("dark_mode", False)
-
-_tpl        = "plotly_dark" if _dark else "plotly_white"
-_font       = "#e2e8f0"     if _dark else "#1e293b"
-_grid       = "rgba(255,255,255,0.07)" if _dark else "rgba(0,0,0,0.06)"
+# ── Tema (siempre oscuro) ─────────────────────────────────────────────────────
+_tpl        = "plotly_dark"
+_font       = "#e2e8f0"
+_grid       = "rgba(255,255,255,0.07)"
 _bg         = "rgba(0,0,0,0)"
-_surface    = "rgba(255,255,255,0.04)" if _dark else "rgba(255,255,255,0.85)"
+_surface    = "rgba(255,255,255,0.04)"
 
 # ── Estilos globales ──────────────────────────────────────────────────────────
 st.markdown("""
@@ -134,67 +134,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Navbar + Sidebar ──────────────────────────────────────────────────────────
-render_navbar()
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     render_sidebar_menu()
-
-# ── Theme FAB flotante (esquina inferior derecha) ─────────────────────────────
-st.markdown("""
-<style>
-.dash-theme-fab {
-    position: fixed !important;
-    bottom: 1.1rem !important;
-    right: 1.1rem !important;
-    z-index: 9999 !important;
-    width: 34px !important;
-    height: 34px !important;
-}
-.dash-theme-fab [data-testid="stBaseButton-secondary"] {
-    width: 34px !important;
-    min-width: 34px !important;
-    max-width: 34px !important;
-    height: 34px !important;
-    padding: 0 !important;
-    background: rgba(13,17,23,.86) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(255,255,255,.13) !important;
-    color: rgba(240,246,252,.60) !important;
-    border-radius: 8px !important;
-    font-size: .68rem !important;
-    font-weight: 600 !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,.32) !important;
-    transform: none !important;
-    transition: background .15s, color .15s !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-    line-height: 34px !important;
-}
-.dash-theme-fab [data-testid="stBaseButton-secondary"]:hover {
-    background: rgba(30,38,55,.96) !important;
-    color: #e6edf3 !important;
-    transform: none !important;
-}
-/* Oculta el span interno y muestra solo el svg-like circle */
-.dash-theme-fab [data-testid="stBaseButton-secondary"] p {
-    font-size: .68rem !important;
-    line-height: 1 !important;
-    margin: 0 !important;
-    overflow: hidden !important;
-    text-overflow: clip !important;
-    max-width: 34px !important;
-}
-</style>
-""", unsafe_allow_html=True)
-st.markdown('<div class="dash-theme-fab">', unsafe_allow_html=True)
-from utils.theme import render_theme_toggle
-render_theme_toggle(key="dash_theme_fab")
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
 now  = datetime.now()
@@ -227,6 +169,52 @@ st.markdown(f"""
 db   = SessionLocal()
 owner_id = get_current_user_id()
 kpis = get_kpis(db, owner_id=owner_id)
+
+# ── Botones Instrucciones y Presupuestos ──────────────────────────────────────
+_, _col_help_dash, _col_bud_dash = st.columns([4, 1.5, 1.5])
+
+with _col_help_dash.popover("📋 Instrucciones", use_container_width=True):
+    st.markdown("#### Guía de Uso del Dashboard")
+    st.markdown("""
+**Stock Total** — Suma de todas las unidades en almacenes del sistema.
+
+**Materiales Críticos** — Items con stock ≤ 5 en el almacén principal; requieren reposición urgente.
+
+**Pendientes** — Requerimientos creados pero aún no despachados completamente.
+
+**Despachos** — Total de salidas registradas desde el inicio del sistema.
+
+---
+
+**Flujo operativo:**
+1. Crear un **Requerimiento** en un almacén de obra.
+2. El sistema reserva automáticamente stock del almacén principal.
+3. Generar un **Despacho** para enviar el material.
+4. Registrar la **Recepción** cuando llega a la obra.
+
+---
+
+**Gráficos:**
+- *Tendencia 7 días* — Entradas y salidas por día.
+- *Distribución de stock* — Proporción por almacén.
+- *Top 5 materiales* — Los más movidos del período.
+""")
+
+with _col_bud_dash.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds_dash = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds_dash:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds_dash:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 
 # ── KPIs ──────────────────────────────────────────────────────────────────────
 k1, k2, k3, k4 = st.columns(4, gap="medium")
@@ -392,7 +380,71 @@ with col_top:
     else:
         st.info("Sin datos de movimientos.")
 
-# ── Fila 4: Actividad reciente ────────────────────────────────────────────────
+# ── Fila 4: Presupuesto vs Gasto por Proyecto ────────────────────────────────
+_all_buds = [b for b in get_budgets(db) if b.budget_soles > 0]
+
+if _all_buds:
+    st.markdown('<div class="sec-title"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>Presupuesto vs. Gasto por Proyecto (S/.)</div>', unsafe_allow_html=True)
+
+    _bud_rows = []
+    for _b in _all_buds:
+        _, _spent, _ = get_dispatch_costs(db, since=_b.created_at)
+        _label = _b.name[:28] + ("…" if len(_b.name) > 28 else "")
+        _fin = getattr(_b, "is_finished", False)
+        _bud_rows.append({
+            "Proyecto":         _label,
+            "Presupuesto S/.":  _b.budget_soles,
+            "Gasto S/.":        _spent,
+            "_over":            _spent > _b.budget_soles,
+            "_finished":        _fin,
+        })
+
+    if _bud_rows:
+        _df_bud = pd.DataFrame(_bud_rows)
+        _gasto_colors = [
+            "#ef4444" if r["_over"] else ("#6366f1" if r["_finished"] else "#059669")
+            for _, r in _df_bud.iterrows()
+        ]
+        _fig_bud = go.Figure()
+        _fig_bud.add_trace(go.Bar(
+            name="Presupuesto S/.",
+            x=_df_bud["Proyecto"],
+            y=_df_bud["Presupuesto S/."],
+            marker_color="#1e40af",
+            text=[f"S/ {v:,.0f}" for v in _df_bud["Presupuesto S/."]],
+            textposition="outside",
+            textfont=dict(color=_font, size=10),
+        ))
+        _fig_bud.add_trace(go.Bar(
+            name="Gasto S/.",
+            x=_df_bud["Proyecto"],
+            y=_df_bud["Gasto S/."],
+            marker_color=_gasto_colors,
+            text=[f"S/ {v:,.0f}" for v in _df_bud["Gasto S/."]],
+            textposition="outside",
+            textfont=dict(color=_font, size=10),
+        ))
+        _fig_bud.update_layout(
+            barmode="group",
+            template=_tpl,
+            paper_bgcolor=_bg, plot_bgcolor=_bg,
+            margin=dict(t=30, b=10, l=0, r=0), height=300,
+            font=dict(color=_font, size=12),
+            xaxis=dict(gridcolor=_grid, tickfont=dict(size=11)),
+            yaxis=dict(gridcolor=_grid, tickprefix="S/ "),
+            legend=dict(orientation="h", y=1.12, x=0),
+            hovermode="x unified",
+        )
+        _fig_bud.update_traces(marker_line_width=0)
+        st.plotly_chart(_fig_bud, use_container_width=True)
+        st.markdown(
+            '<div style="font-size:.73rem;color:rgba(255,255,255,.38);margin-top:-.5rem;margin-bottom:.5rem;">'
+            '&#9632; Azul = Presupuesto &nbsp;·&nbsp; &#9632; Verde = Gasto dentro del presupuesto &nbsp;·&nbsp;'
+            ' &#9632; Rojo = Excede el presupuesto &nbsp;·&nbsp; &#9632; Índigo = Obra finalizada</div>',
+            unsafe_allow_html=True,
+        )
+
+# ── Fila 5: Actividad reciente ────────────────────────────────────────────────
 st.markdown('<div class="sec-title"><svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>Actividad Reciente</div>', unsafe_allow_html=True)
 
 movs = get_recent_movements(db, owner_id=owner_id)

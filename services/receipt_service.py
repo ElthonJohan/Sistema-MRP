@@ -26,6 +26,8 @@ def create_receipt(db: Session, dispatch_id, user_id=1):
 
     requirement = dispatch.requirement
     warehouse_obra = requirement.warehouse_id_obra
+    req_budget_id   = getattr(requirement, "budget_id", None)
+    req_budget_name = getattr(requirement, "budget_name", None)
 
     receipt = Receipt(
         dispatch_id=dispatch_id,
@@ -41,9 +43,11 @@ def create_receipt(db: Session, dispatch_id, user_id=1):
         material_id = item.material_id
         qty = item.dispatched_qty
 
-        # 📦 INVENTARIO OBRA
+        # 📦 INVENTARIO OBRA — separado por proyecto cuando el req. está vinculado
         inventory = get_or_create_inventory(
-            db, warehouse_obra, material_id
+            db, warehouse_obra, material_id,
+            budget_id=req_budget_id,
+            budget_name=req_budget_name,
         )
 
         inventory.stock += qty

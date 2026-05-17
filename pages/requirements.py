@@ -3,6 +3,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 from database import SessionLocal
 from services.requirement_service import create_requirement, get_requirements, cancel_requirement
+from services.budget_service import get_budgets
 from services.warehouse_service import get_warehouses
 from models.warehouse import Warehouse
 from models.material import Material
@@ -95,6 +96,84 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
     text-align: center; font-size: .80rem; font-weight: 600;
     padding: .5rem 0; opacity: .70;
 }
+
+/* ── Cabecera del requerimiento dentro del expander ── */
+.req-hdr {
+    display: flex; gap: .5rem; flex-wrap: wrap;
+    margin: .1rem 0 .85rem;
+}
+.req-hdr-chip {
+    display: inline-flex; align-items: baseline; gap: .45rem;
+    padding: .32rem .72rem; border-radius: 10px;
+    background: rgba(37,99,235,.07);
+    border: 1px solid rgba(37,99,235,.18);
+}
+.req-hdr-chip.req-hdr-proj {
+    background: rgba(5,150,105,.10);
+    border-color: rgba(5,150,105,.28);
+}
+.req-hdr-chip.req-hdr-proj-empty {
+    background: rgba(239,68,68,.08);
+    border-color: rgba(239,68,68,.22);
+}
+.req-hdr-lbl {
+    font-size: .60rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: rgba(148,163,184,.55);
+}
+.req-hdr-val { font-size: .82rem; font-weight: 800; color: #e2e8f0; }
+.req-hdr-chip.req-hdr-proj .req-hdr-val { color: #6ee7b7; }
+.req-hdr-chip.req-hdr-proj-empty .req-hdr-val { color: #fca5a5; font-style: italic; }
+
+/* ── Tarjeta de ítem dentro del requerimiento ── */
+.req-item-card {
+    padding: .8rem 1.1rem; border-radius: 13px;
+    border: 1px solid rgba(37,99,235,.18);
+    background: linear-gradient(135deg, rgba(37,99,235,.06), rgba(79,70,229,.03));
+    margin-bottom: .45rem;
+}
+.req-item-head {
+    display: flex; align-items: center; gap: .65rem;
+    margin-bottom: .55rem; padding-bottom: .4rem;
+    border-bottom: 1px solid rgba(37,99,235,.14); flex-wrap: wrap;
+}
+.req-item-name { font-weight: 800; color: #f1f5f9; font-size: .92rem; flex: 1; min-width: 140px; }
+.req-item-badge { flex-shrink: 0; }
+.req-item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    gap: .45rem .8rem;
+}
+.req-item-field {
+    display: flex; flex-direction: column; gap: .12rem;
+    padding: .3rem .55rem;
+    border-radius: 8px;
+    background: rgba(15,23,42,.30);
+    border: 1px solid rgba(255,255,255,.04);
+}
+.req-item-lbl {
+    font-size: .58rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .07em;
+    color: rgba(148,163,184,.55);
+}
+.req-item-val { font-size: .85rem; font-weight: 800; color: #e2e8f0; line-height: 1.2; }
+.req-item-val em { font-style: normal; opacity: .55; font-weight: 600; font-size: .75rem; }
+.req-item-val.empty { color: rgba(148,163,184,.40); font-style: italic; font-weight: 500; }
+.req-item-val.qty-blue  { color: #60a5fa; }
+.req-item-val.qty-green { color: #34d399; }
+.req-item-val.price-s   { color: #34d399; }
+.req-item-val.price-d   { color: #60a5fa; }
+
+.req-total-bar {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: .85rem; margin-top: .4rem; padding: .55rem 1.1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(251,191,36,.22);
+    background: rgba(251,191,36,.05); flex-wrap: wrap;
+}
+.req-total-lbl { font-size: .72rem; color: rgba(148,163,184,.65); font-weight: 600; margin-right: auto; }
+.req-total-s   { font-size: .98rem; font-weight: 900; color: #fbbf24; }
+.req-total-d   { font-size: .98rem; font-weight: 900; color: #60a5fa; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -139,8 +218,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Instrucciones ─────────────────────────────────────────────────────────────
-_, _col_help = st.columns([6, 1])
+# ── Instrucciones + Presupuestos Activos ──────────────────────────────────────
+_, _col_budgets, _col_help = st.columns([4.6, 1.5, 1])
+with _col_budgets.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
     st.markdown("#### Requerimientos — Guía de uso")
     st.markdown("""
@@ -183,6 +277,12 @@ elif not materials:
         f"El almacén principal **{principal_warehouse.name}** no tiene materiales en inventario. "
         "Ve a **Inventario** y agrega stock primero."
     )
+elif not [b for b in get_budgets(db) if b.is_active]:
+    st.error(
+        "No hay **proyectos activos** disponibles. "
+        "Pide al administrador que cree y active un proyecto en la sección **Presupuestos** "
+        "antes de generar requerimientos."
+    )
 else:
     if st.session_state.get("req_created_msg"):
         st.success(st.session_state.pop("req_created_msg"))
@@ -192,19 +292,62 @@ else:
         mat_dict = {m.name: m.id for m in materials}
 
         selected_wh  = st.selectbox("Almacén de obra", list(wh_dict.keys()), key="req_wh")
+
+        # ── Selector de proyecto (OBLIGATORIO — solo proyectos activos) ─────────
+        _active_budgets = [b for b in get_budgets(db) if b.is_active]
+        _bud_opts       = {b.name: b.id for b in _active_budgets}
+        _proj_label = st.selectbox(
+            "Proyecto *", list(_bud_opts.keys()), key="req_proj",
+            help="El proyecto es obligatorio — el requerimiento se vinculará a él.",
+        )
+        _proj_id    = _bud_opts[_proj_label]
+
         num_items    = st.number_input("Cantidad de materiales", min_value=1, max_value=20, step=1, key="req_num")
 
         items = []
         for i in range(int(num_items)):
             col_m, col_q = st.columns([3, 1], gap="small")
-            mat = col_m.selectbox(f"Material {i+1}", list(mat_dict.keys()), key=f"req_mat_{i}")
-            qty = col_q.number_input("Cantidad", min_value=1, key=f"req_qty_{i}", label_visibility="visible")
-            items.append({"material_id": mat_dict[mat], "qty": qty})
+            mat    = col_m.selectbox(f"Material {i+1}", list(mat_dict.keys()), key=f"req_mat_{i}")
+            qty    = col_q.number_input("Cantidad", min_value=1, key=f"req_qty_{i}", label_visibility="visible")
+            mat_id = mat_dict[mat]
+            items.append({"material_id": mat_id, "qty": qty})
+
+            # ── Indicador de stock disponible ──────────────────────────────────
+            if principal_warehouse:
+                _all_inv   = db.query(Inventory).filter(
+                    Inventory.warehouse_id == principal_warehouse.id,
+                    Inventory.material_id  == mat_id,
+                ).all()
+                _all_avail = sum(max(0, inv.stock - inv.reserved) for inv in _all_inv)
+
+                if _proj_id:
+                    _proj_inv   = next((inv for inv in _all_inv if inv.budget_id == _proj_id), None)
+                    _proj_avail = max(0, (_proj_inv.stock - _proj_inv.reserved)) if _proj_inv else 0
+                    if _proj_avail >= qty:
+                        _sc = "#34d399"
+                        _st = f"✓ {_proj_avail} disp. en proyecto · {_all_avail} total"
+                    elif _all_avail >= qty:
+                        _sc = "#fbbf24"
+                        _st = f"⚠ {_proj_avail} en proyecto · {_all_avail} disp. total"
+                    else:
+                        _sc = "#f87171"
+                        _st = f"✗ Stock insuf. — {_all_avail} disp. total"
+                else:
+                    _sc = "#34d399" if _all_avail >= qty else ("#fbbf24" if _all_avail > 0 else "#f87171")
+                    _st = f"{_all_avail} disponible en almacén principal"
+
+                col_m.markdown(
+                    f"<div style='font-size:.70rem;font-weight:700;color:{_sc};"
+                    f"margin-top:.05rem;padding-bottom:.1rem'>{_st}</div>",
+                    unsafe_allow_html=True,
+                )
 
         if st.button("Crear Requerimiento", type="primary", key="btn_create_req"):
-            success, msg = create_requirement(db, wh_dict[selected_wh], items)
+            success, msg = create_requirement(db, wh_dict[selected_wh], items, budget_id=_proj_id)
             if success:
-                for k in ["req_wh", "req_num"] + [f"req_mat_{i}" for i in range(int(num_items))] + [f"req_qty_{i}" for i in range(int(num_items))]:
+                for k in (["req_wh", "req_num", "req_proj"]
+                          + [f"req_mat_{i}" for i in range(int(num_items))]
+                          + [f"req_qty_{i}" for i in range(int(num_items))]):
                     st.session_state.pop(k, None)
                 st.session_state["req_created_msg"] = msg
                 st.rerun()
@@ -294,12 +437,22 @@ else:
         can_cancel = r.status in ("pending", "partial")  # "fulfilled" = ya despachado, no se puede cancelar
         s_emoji    = _STATUS_EMOJI.get(r.status, "")
         s_text     = _STATUS_TEXT.get(r.status, r.status)
+        proj_name  = getattr(r, "budget_name", None)
+
+        req_cost = sum(
+            it.requested_qty * float(it.material.unit_price or 0)
+            for it in (r.items or [])
+            if it.material
+        )
+        cost_str = f"💰 S/ {req_cost:,.2f}" if req_cost > 0 else ""
 
         exp_label = (
             f"#{r.id}  ·  {s_emoji} {s_text}"
             f"  ·  📅 {fecha}"
             f"  ·  🏢 {wh_name}"
-            f"  ·  {n_items} ítem{'s' if n_items != 1 else ''}"
+            + (f"  ·  📂 {proj_name}" if proj_name else "")
+            + f"  ·  {n_items} ítem{'s' if n_items != 1 else ''}"
+            + (f"  ·  {cost_str}" if cost_str else "")
         )
 
         with st.expander(exp_label):
@@ -338,46 +491,89 @@ else:
                     unsafe_allow_html=True,
                 )
 
+            # ── Cabecera del requerimiento (proyecto + obra) ─────────────────
+            _hdr_proj = (
+                f'<span class="req-hdr-chip req-hdr-proj">'
+                f'<span class="req-hdr-lbl">Proyecto</span>'
+                f'<span class="req-hdr-val">{proj_name}</span></span>'
+                if proj_name else
+                '<span class="req-hdr-chip req-hdr-proj-empty">'
+                '<span class="req-hdr-lbl">Proyecto</span>'
+                '<span class="req-hdr-val">— sin proyecto —</span></span>'
+            )
+            st.markdown(
+                '<div class="req-hdr">'
+                f'<span class="req-hdr-chip"><span class="req-hdr-lbl">Almacén obra</span>'
+                f'<span class="req-hdr-val">{wh_name}</span></span>'
+                f'{_hdr_proj}'
+                f'<span class="req-hdr-chip"><span class="req-hdr-lbl">Fecha</span>'
+                f'<span class="req-hdr-val">{fecha}</span></span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
             # ── Ítems ─────────────────────────────────────────────────────
             if not r.items:
                 st.info("Sin ítems.")
             else:
+                item_cost_total = 0.0
+                item_cost_total_d = 0.0
                 for it in r.items:
-                    mat_name  = it.material.name if it.material else f"Material {it.material_id}"
-                    mat_unit  = (it.material.unit or "") if it.material else ""
+                    mat_name    = it.material.name if it.material else f"Material {it.material_id}"
+                    mat_unit    = (it.material.unit or "").strip() if it.material else ""
+                    unit_price  = float(it.material.unit_price or 0) if it.material else 0.0
+                    unit_price_d = float(it.material.unit_price_dolares or 0) if it.material else 0.0
+                    item_cost   = it.requested_qty * unit_price
+                    item_cost_d = it.requested_qty * unit_price_d
+                    item_cost_total   += item_cost
+                    item_cost_total_d += item_cost_d
                     if r.status == "cancelled":
                         it_badge = _ITEM_CANCELLED
                     else:
                         it_badge = _ITEM_BADGE.get(it.status, it.status)
-                    cum_color = "#34d399" if it.fulfilled_qty > 0 else "#94a3b8"
-                    pct       = int(it.fulfilled_qty / it.requested_qty * 100) if it.requested_qty else 0
-                    st.markdown(f"""
-<div style="display:flex;align-items:center;gap:1.2rem;padding:.65rem 1rem;
-            border-radius:11px;border:1px solid rgba(37,99,235,.13);
-            background:rgba(37,99,235,.04);margin-bottom:.35rem;flex-wrap:wrap">
-  <div style="flex:1;min-width:140px">
-    <span style="font-weight:800;color:#e2e8f0;font-size:.85rem">{mat_name}</span>
-    {"<span style='font-size:.71rem;color:rgba(148,163,184,.50);margin-left:.4rem'>" + mat_unit + "</span>" if mat_unit else ""}
-  </div>
-  <div style="display:flex;gap:1.4rem;align-items:center;flex-wrap:wrap">
-    <div style="text-align:center;min-width:48px">
-      <div style="font-size:.60rem;font-weight:700;color:rgba(148,163,184,.50);
-                  text-transform:uppercase;letter-spacing:.05em">Solicitado</div>
-      <div style="font-weight:900;color:#60a5fa;font-size:.95rem">{it.requested_qty}</div>
-    </div>
-    <div style="text-align:center;min-width:48px">
-      <div style="font-size:.60rem;font-weight:700;color:rgba(148,163,184,.50);
-                  text-transform:uppercase;letter-spacing:.05em">Cumplido</div>
-      <div style="font-weight:900;color:{cum_color};font-size:.95rem">{it.fulfilled_qty}</div>
-    </div>
-    <div style="text-align:center;min-width:36px">
-      <div style="font-size:.60rem;font-weight:700;color:rgba(148,163,184,.50);
-                  text-transform:uppercase;letter-spacing:.05em">%</div>
-      <div style="font-weight:700;color:rgba(148,163,184,.60);font-size:.85rem">{pct}%</div>
-    </div>
-    <div>{it_badge}</div>
-  </div>
-</div>""", unsafe_allow_html=True)
+                    pct = int(it.fulfilled_qty / it.requested_qty * 100) if it.requested_qty else 0
+                    qty_lbl  = mat_unit if mat_unit else "uds"
+                    price_s_html = f"S/ {unit_price:,.2f}" if unit_price > 0 else "—"
+                    price_d_html = f"$ {unit_price_d:,.2f}" if unit_price_d > 0 else "—"
+                    price_s_cls  = "" if unit_price > 0 else "empty"
+                    price_d_cls  = "" if unit_price_d > 0 else "empty"
+
+                    item_html = (
+                        '<div class="req-item-card">'
+                          '<div class="req-item-head">'
+                            f'<span class="req-item-name">{mat_name}</span>'
+                            f'<span class="req-item-badge">{it_badge}</span>'
+                          '</div>'
+                          '<div class="req-item-grid">'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Cantidad solicitada</span>'
+                            f'<span class="req-item-val qty-blue">{it.requested_qty}</span></div>'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Unidad</span>'
+                            f'<span class="req-item-val">{qty_lbl}</span></div>'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Cumplido</span>'
+                            f'<span class="req-item-val qty-green">{it.fulfilled_qty} <em>({pct}%)</em></span></div>'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Precio unit. S/.</span>'
+                            f'<span class="req-item-val price-s {price_s_cls}">{price_s_html}</span></div>'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Precio unit. $</span>'
+                            f'<span class="req-item-val price-d {price_d_cls}">{price_d_html}</span></div>'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Costo S/.</span>'
+                            f'<span class="req-item-val price-s {price_s_cls}">{("S/ " + f"{item_cost:,.2f}") if unit_price > 0 else "—"}</span></div>'
+                            f'<div class="req-item-field"><span class="req-item-lbl">Costo $</span>'
+                            f'<span class="req-item-val price-d {price_d_cls}">{("$ " + f"{item_cost_d:,.2f}") if unit_price_d > 0 else "—"}</span></div>'
+                          '</div>'
+                        '</div>'
+                    )
+                    st.markdown(item_html, unsafe_allow_html=True)
+
+                if item_cost_total > 0 or item_cost_total_d > 0:
+                    _t_s = f'<span class="req-total-s">S/ {item_cost_total:,.2f}</span>' if item_cost_total > 0 else ""
+                    _t_d = f'<span class="req-total-d">$ {item_cost_total_d:,.2f}</span>' if item_cost_total_d > 0 else ""
+                    st.markdown(
+                        '<div class="req-total-bar">'
+                          '<span class="req-total-lbl">Costo estimado total del requerimiento</span>'
+                          f'{_t_s}{_t_d}'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
 
 # ── Navegación de páginas ─────────────────────────────────────────────────────
 pg_prev, pg_info, pg_next = st.columns([1, 3, 1])

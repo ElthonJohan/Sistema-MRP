@@ -3,6 +3,7 @@ import streamlit as st
 from database import SessionLocal
 import time
 from services.warehouse_service import create_warehouse, get_warehouses, delete_warehouse, update_warehouse
+from services.budget_service import get_budgets
 from utils.auth import require_cliente, get_current_user_id
 from utils.navbar import render_navbar, render_sidebar_menu
 
@@ -130,8 +131,23 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── Instrucciones ─────────────────────────────────────────────────────────────
-_, _col_help = st.columns([6, 1])
+# ── Instrucciones + Presupuestos Activos ──────────────────────────────────────
+_, _col_budgets, _col_help = st.columns([4.6, 1.5, 1])
+with _col_budgets.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
     st.markdown("#### Almacenes — Guía de uso")
     st.markdown("""
@@ -157,13 +173,15 @@ st.markdown('<div class="sec-title">Crear Almacén</div>', unsafe_allow_html=Tru
 if st.session_state.get("wh_created_msg"):
     st.success(st.session_state.pop("wh_created_msg"))
 
+_fv = st.session_state.get("_wh_form_ver", 0)
+
 with st.expander("Nuevo almacén", expanded=False):
     col_a, col_b = st.columns(2, gap="medium")
-    name     = col_a.text_input("Nombre *", placeholder="Ej: Almacén Central", key="new_wh_name")
-    type_    = col_b.selectbox("Tipo", ["principal", "obra"], key="new_wh_type")
+    name     = col_a.text_input("Nombre *", placeholder="Ej: Almacén Central", key=f"new_wh_name_{_fv}")
+    type_    = col_b.selectbox("Tipo", ["principal", "obra"], key=f"new_wh_type_{_fv}")
     col_c, col_d = st.columns(2, gap="medium")
-    location = col_c.text_input("Ciudad/Distrito *", placeholder="Ej: Lima - Miraflores", key="new_wh_loc")
-    address  = col_d.text_input("Dirección *", placeholder="Ej: Av. Industrial 245, Piso 2", key="new_wh_addr")
+    location = col_c.text_input("Ciudad/Distrito *", placeholder="Ej: Lima - Miraflores", key=f"new_wh_loc_{_fv}")
+    address  = col_d.text_input("Dirección *", placeholder="Ej: Av. Industrial 245, Piso 2", key=f"new_wh_addr_{_fv}")
 
     if st.button("Crear Almacén", type="primary", use_container_width=True, key="btn_new_wh"):
         missing = [f for f, v in [("Nombre", name), ("Ciudad/Distrito", location), ("Dirección", address)] if not v.strip()]
@@ -175,8 +193,7 @@ with st.expander("Nuevo almacén", expanded=False):
             if "error" in result:
                 st.error(result["error"])
             else:
-                for k in ["new_wh_name", "new_wh_loc", "new_wh_addr"]:
-                    st.session_state.pop(k, None)
+                st.session_state["_wh_form_ver"] = _fv + 1
                 st.session_state["wh_created_msg"] = "Almacén creado correctamente."
                 st.rerun()
 

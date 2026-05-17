@@ -9,10 +9,10 @@ from services.material_service import (
     delete_material,
     get_materials_filtered,
     update_material,
-    delete_material_code
-
+    delete_material_code,
 )
-from utils.auth import require_cliente
+from services.budget_service import get_budgets
+from utils.auth import require_cliente, get_current_user_id
 from utils.navbar import render_navbar, render_sidebar_menu
 
 st.set_page_config(page_title="Materiales — Sistema MRP", layout="wide", initial_sidebar_state="expanded")
@@ -80,6 +80,76 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
 [data-testid="stAlert"] { border-radius: 10px !important; }
 .mat-table { border-radius: 12px; overflow: hidden; border: 1px solid rgba(37,99,235,.15); }
 
+/* ── Tarjeta de material ── */
+.mat-info-card {
+    padding: .92rem 1.25rem .85rem 1.55rem !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(37,99,235,.20) !important;
+    background: linear-gradient(135deg, rgba(37,99,235,.08) 0%, rgba(79,70,229,.04) 100%) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    transition: border-color .18s, background .18s, box-shadow .18s !important;
+    cursor: default !important;
+}
+.mat-info-card::before {
+    content: "" !important;
+    position: absolute !important;
+    left: 0 !important; top: 0 !important; bottom: 0 !important;
+    width: 4px !important;
+    border-radius: 4px 0 0 4px !important;
+    background: linear-gradient(180deg, #2563eb, #4f46e5) !important;
+}
+.mat-info-card:hover {
+    border-color: rgba(37,99,235,.40) !important;
+    background: linear-gradient(135deg, rgba(37,99,235,.13) 0%, rgba(79,70,229,.07) 100%) !important;
+    box-shadow: 0 4px 22px rgba(37,99,235,.14) !important;
+}
+.mat-card-header {
+    display: flex; align-items: center; gap: .65rem;
+    flex-wrap: wrap; margin-bottom: .55rem;
+    padding-bottom: .45rem;
+    border-bottom: 1px solid rgba(37,99,235,.14);
+}
+.mat-card-name {
+    font-weight: 800; color: #f1f5f9; font-size: 1.02rem;
+    margin-right: auto;
+}
+.mat-id-chip {
+    display: inline-flex; align-items: center;
+    padding: .22rem .7rem; border-radius: 20px;
+    font-size: .68rem; font-weight: 800;
+    background: rgba(37,99,235,.22); color: #93c5fd;
+    border: 1px solid rgba(37,99,235,.32);
+    white-space: nowrap; letter-spacing: .03em;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+}
+.mat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+    gap: .55rem .9rem;
+}
+.mat-field {
+    display: flex; flex-direction: column;
+    gap: .15rem;
+    padding: .35rem .55rem;
+    border-radius: 8px;
+    background: rgba(15,23,42,.30);
+    border: 1px solid rgba(255,255,255,.04);
+}
+.mat-field-lbl {
+    font-size: .60rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: rgba(148,163,184,.55);
+}
+.mat-field-val {
+    font-size: .85rem; font-weight: 700;
+    color: #e2e8f0; line-height: 1.2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mat-field-val.empty { color: rgba(148,163,184,.40); font-style: italic; font-weight: 500; }
+.mat-field-val.price-s { color: #34d399; }
+.mat-field-val.price-d { color: #60a5fa; }
+
 /* ── Alineación vertical de botones con tarjeta de material ── */
 [data-testid="stHorizontalBlock"]:has(.mat-info-card) {
     align-items: center !important;
@@ -89,7 +159,66 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
     flex-direction: column !important;
     justify-content: center !important;
 }
+
+/* ── Botón editar (etiquetado por JS con data-action=edit) ── */
+[data-testid="stMain"] button[data-action="edit"] {
+    background: linear-gradient(135deg, rgba(37,99,235,.18), rgba(79,70,229,.10)) !important;
+    border: 1px solid rgba(37,99,235,.40) !important;
+    color: #93c5fd !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    height: 42px !important;
+    box-shadow: 0 2px 8px rgba(37,99,235,.10) !important;
+    transition: all .18s !important;
+}
+[data-testid="stMain"] button[data-action="edit"]:hover {
+    background: linear-gradient(135deg, rgba(37,99,235,.32), rgba(79,70,229,.20)) !important;
+    border-color: rgba(37,99,235,.70) !important;
+    color: #bfdbfe !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(37,99,235,.22) !important;
+}
+[data-testid="stMain"] button[data-action="edit"][data-testid="stBaseButton-primary"] {
+    background: linear-gradient(135deg, rgba(37,99,235,.40), rgba(79,70,229,.30)) !important;
+    border: 1px solid rgba(37,99,235,.75) !important;
+    color: #dbeafe !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,.16) !important;
+}
+
+/* ── Botón eliminar (etiquetado por JS con data-action=delete) ── */
+[data-testid="stMain"] button[data-action="delete"] {
+    background: linear-gradient(135deg, rgba(239,68,68,.16), rgba(220,38,38,.08)) !important;
+    border: 1px solid rgba(239,68,68,.40) !important;
+    color: #fca5a5 !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    height: 42px !important;
+    box-shadow: 0 2px 8px rgba(239,68,68,.10) !important;
+    transition: all .18s !important;
+}
+[data-testid="stMain"] button[data-action="delete"]:hover {
+    background: linear-gradient(135deg, rgba(239,68,68,.30), rgba(220,38,38,.18)) !important;
+    border-color: rgba(239,68,68,.65) !important;
+    color: #fee2e2 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(239,68,68,.22) !important;
+}
 </style>
+<script>
+(function(){
+    function tagMatBtns(){
+        document.querySelectorAll('[data-testid="stMain"] button').forEach(function(b){
+            var t=b.textContent.trim();
+            if(t==='✏'||t==='✏️') b.dataset.action='edit';
+            else if(t==='✕'||t==='X'||t==='×') b.dataset.action='delete';
+        });
+    }
+    tagMatBtns();
+    var obs=new MutationObserver(tagMatBtns);
+    obs.observe(document.body,{childList:true,subtree:true});
+    setTimeout(tagMatBtns,150);setTimeout(tagMatBtns,500);
+})();
+</script>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
@@ -117,6 +246,7 @@ with st.sidebar:
 
 
 db = SessionLocal()
+owner_id = get_current_user_id()
 materials = get_materials(db)
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
@@ -158,25 +288,41 @@ st.markdown(f"""
 #                 time.sleep(2)
 #                 st.rerun()
 
-# ── Instrucciones ─────────────────────────────────────────────────────────────
-_, _col_help = st.columns([6, 1])
+# ── Instrucciones + Presupuestos Activos ──────────────────────────────────────
+_, _col_budgets, _col_help = st.columns([4.6, 1.5, 1])
+with _col_budgets.popover("📊 Presupuestos", use_container_width=True):
+    st.markdown("#### Presupuestos Activos")
+    _active_buds = [b for b in get_budgets(db) if b.is_active]
+    if not _active_buds:
+        st.info("No hay presupuestos activos registrados.")
+    else:
+        for _b in _active_buds:
+            st.markdown(f"""
+<div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
+            background:rgba(5,150,105,.07);margin-bottom:.45rem">
+  <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
+  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
+    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+</div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
     st.markdown("#### Materiales — Guía de uso")
     st.markdown("""
 **Crear un material**
-1. Despliega **Nuevo material** e ingresa: Código, Nombre, Unidad y Descripción.
+1. Despliega **Nuevo material** e ingresa: Código, Nombre, Unidad, Descripción y costos.
 2. El **Código** debe ser único (por ejemplo: MAT-001). El **Nombre** también debe ser único.
 3. En **Unidad** indica la unidad de medida (kg, m, unidad, litro, etc.).
-4. Presiona **Crear Material**; aparecerá en el catálogo de inmediato.
+4. **Costo S/.** y **Costo $** son opcionales; se usan para calcular presupuestos.
+5. Presiona **Crear Material**; aparecerá en el catálogo de inmediato.
 
 **Catálogo**
-- La tabla muestra todos los materiales con código, nombre, unidad y descripción.
+- La tabla muestra todos los materiales con código, nombre, unidad, descripción y precios.
 
 **Editar y eliminar**
-- En **Editar material existente** selecciona uno y modifica sus campos.
-- En **Eliminar material existente** selecciona uno y confirma; la eliminación es permanente.
+- Presiona ✏ para editar un material (incluye los campos de costo).
+- Presiona ✕ para eliminar; la eliminación es permanente.
 
-> Si eliminas un material que ya tiene stock en inventario, los registros de inventario quedarán huérfanos. Verifica primero.
+> Si eliminas un material que ya tiene stock en inventario, los registros quedarán huérfanos. Verifica primero.
 """)
 
 # ── Crear ─────────────────────────────────────────────────────────────────────
@@ -185,20 +331,42 @@ st.markdown('<div class="sec-title">Crear Material</div>', unsafe_allow_html=Tru
 with st.expander("Nuevo material", expanded=False):
     with st.form("create_material_form"):
         col_a, col_b = st.columns(2, gap="medium")
-        code        = col_a.text_input("Código", placeholder="Ej: MAT-001")
-        name        = col_b.text_input("Nombre", placeholder="Ej: Cemento Portland")
+        code        = col_a.text_input("Código *", placeholder="Ej: MAT-001")
+        name        = col_b.text_input("Nombre *", placeholder="Ej: Cemento Portland")
         unit        = col_a.text_input("Unidad", placeholder="Ej: kg, m, unidad")
         description = col_b.text_input("Descripción", placeholder="Descripción breve")
+        col_c, col_d = st.columns(2, gap="medium")
+        f_price_soles = col_c.number_input(
+            "Costo unitario S/.",
+            min_value=0.0, value=None, step=0.50, format="%.2f",
+            placeholder="Ej. 10.50",
+            help="Precio en soles peruanos. Deja vacío si no aplica, pero debe haber al menos un precio (S/. o $).",
+        )
+        f_price_dolar = col_d.number_input(
+            "Costo unitario $",
+            min_value=0.0, value=None, step=0.10, format="%.2f",
+            placeholder="Ej. 2.80",
+            help="Precio en dólares americanos. Deja vacío si no aplica, pero debe haber al menos un precio (S/. o $).",
+        )
         submit      = st.form_submit_button("Crear Material", use_container_width=True)
 
     if submit:
         if code and name:
             unit_clean = unit.strip()
+            _ps = f_price_soles or 0.0
+            _pd = f_price_dolar or 0.0
             if unit_clean.startswith("-") and unit_clean.lstrip("-").replace(".", "").isdigit():
                 st.error("La unidad no puede ser un número negativo.")
-
+            elif _ps < 0 or _pd < 0:
+                st.error("Los costos no pueden ser negativos.")
+            elif _ps <= 0 and _pd <= 0:
+                st.error("Debes ingresar un costo mayor a 0 — al menos en S/. o $.")
             else:
-                created, info = create_material(db, code, name, unit_clean, description)
+                created, info = create_material(
+                    db, code, name, unit_clean, description,
+                    unit_price=_ps,
+                    unit_price_dolares=_pd,
+                )
                 if created:
                     st.success("Material creado correctamente.")
                     st.rerun()
@@ -415,25 +583,36 @@ else:
         col_card, col_edit, col_del = st.columns([9, 1, 1], gap="small", vertical_alignment="center")
 
         with col_card:
-            desc_row = (
-                f"<div style='margin-top:.22rem;font-size:.71rem;color:rgba(148,163,184,.45);"
-                f"white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>{m.description}</div>"
-            ) if m.description else ""
-            st.markdown(f"""
-<div class="mat-info-card" style="padding:.6rem 1.1rem;border-radius:12px;
-            border:1px solid rgba(37,99,235,.14);background:rgba(37,99,235,.04)">
-  <div style="display:grid;grid-template-columns:max-content 1fr max-content;
-              align-items:center;gap:.75rem">
-    <span style="display:inline-flex;align-items:center;padding:.17rem .6rem;border-radius:20px;
-                 font-size:.67rem;font-weight:700;background:rgba(37,99,235,.18);color:#60a5fa;
-                 border:1px solid rgba(37,99,235,.22);white-space:nowrap;flex-shrink:0">{m.code}</span>
-    <span style="font-weight:800;color:#f1f5f9;font-size:.88rem;white-space:nowrap;
-                 overflow:hidden;text-overflow:ellipsis">{m.name}</span>
-    <span style="font-size:.74rem;color:rgba(148,163,184,.55);white-space:nowrap;
-                 padding-left:.2rem;flex-shrink:0">{m.unit or '—'}</span>
-  </div>
-  {desc_row}
-</div>""", unsafe_allow_html=True)
+            price_s = m.unit_price or 0.0
+            price_d = m.unit_price_dolares or 0.0
+            unit_val = (m.unit or "").strip() or "—"
+            desc_val = (m.description or "").strip() or "Sin descripción"
+            unit_cls = "" if (m.unit or "").strip() else "empty"
+            desc_cls = "" if (m.description or "").strip() else "empty"
+            price_s_html = f"S/ {price_s:,.2f}" if price_s > 0 else "—"
+            price_d_html = f"$ {price_d:,.2f}" if price_d > 0 else "—"
+            price_s_cls  = "price-s" if price_s > 0 else "empty"
+            price_d_cls  = "price-d" if price_d > 0 else "empty"
+
+            card_html = (
+                '<div class="mat-info-card">'
+                  '<div class="mat-card-header">'
+                    f'<span class="mat-id-chip">{m.code}</span>'
+                    f'<span class="mat-card-name">{m.name}</span>'
+                  '</div>'
+                  '<div class="mat-card-grid">'
+                    f'<div class="mat-field"><span class="mat-field-lbl">Unidad</span>'
+                    f'<span class="mat-field-val {unit_cls}">{unit_val}</span></div>'
+                    f'<div class="mat-field"><span class="mat-field-lbl">Descripción</span>'
+                    f'<span class="mat-field-val {desc_cls}" title="{desc_val}">{desc_val}</span></div>'
+                    f'<div class="mat-field"><span class="mat-field-lbl">Precio S/.</span>'
+                    f'<span class="mat-field-val {price_s_cls}">{price_s_html}</span></div>'
+                    f'<div class="mat-field"><span class="mat-field-lbl">Precio $</span>'
+                    f'<span class="mat-field-val {price_d_cls}">{price_d_html}</span></div>'
+                  '</div>'
+                '</div>'
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
         with col_edit:
             editing = st.session_state.get("edit_mat_id") == m.id
@@ -464,13 +643,27 @@ else:
                 new_name = col_b.text_input("Nombre *",      value=m.name,              key=f"ed_name_{m.id}")
                 new_unit = col_a.text_input("Unidad",        value=m.unit or "",        key=f"ed_unit_{m.id}")
                 new_desc = col_b.text_input("Descripción",   value=m.description or "", key=f"ed_desc_{m.id}")
+                col_c, col_d = st.columns(2, gap="medium")
+                new_price_s = col_c.number_input(
+                    "Costo S/.", min_value=0.0, step=0.50, format="%.2f",
+                    value=float(m.unit_price or 0.0), key=f"ed_price_s_{m.id}",
+                )
+                new_price_d = col_d.number_input(
+                    "Costo $", min_value=0.0, step=0.10, format="%.2f",
+                    value=float(m.unit_price_dolares or 0.0), key=f"ed_price_d_{m.id}",
+                )
                 st.markdown("</div>", unsafe_allow_html=True)
 
                 s_col, c_col = st.columns(2, gap="small")
                 if s_col.button("Guardar cambios", type="primary", key=f"save_mat_{m.id}", use_container_width=True):
                     if new_code.strip() and new_name.strip():
                         unit_clean = new_unit.strip()
-                        updated, info = update_material(db, m.id, new_code.strip(), new_name.strip(), unit_clean, new_desc.strip())
+                        updated, info = update_material(
+                            db, m.id, new_code.strip(), new_name.strip(),
+                            unit_clean, new_desc.strip(),
+                            unit_price=new_price_s,
+                            unit_price_dolares=new_price_d,
+                        )
                         if updated:
                             st.session_state.pop("edit_mat_id", None)
                             st.session_state["mat_op_msg"] = "Material actualizado correctamente."
@@ -489,7 +682,7 @@ else:
             c_msg, c_yes, c_no = st.columns([5, 1, 1], gap="small")
             c_msg.error(f"¿Eliminar permanentemente **{m.name}** ({m.code})? No se puede deshacer.")
             if c_yes.button("Sí, eliminar", key=f"yes_del_mat_{m.id}", type="primary", use_container_width=True):
-                delete_material_code(db, m.code)
+                delete_material_code(db, m.code, user_id=owner_id)
                 st.session_state.pop("confirm_del_mat", None)
                 st.session_state["mat_op_msg"] = f"Material **{m.name}** eliminado correctamente."
                 st.rerun()

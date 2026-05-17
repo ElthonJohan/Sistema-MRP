@@ -9,7 +9,7 @@ from datetime import datetime, date, timedelta
 
 def get_kpis(db: Session, owner_id: int = None):
     """KPIs generales. Si owner_id se pasa, filtra solo los almacenes del cliente."""
-    inv_q = db.query(Inventory)
+    inv_q = db.query(Inventory).filter(Inventory.is_active == True)
     wh_filter_ids = None
 
     if owner_id is not None:
@@ -30,7 +30,11 @@ def get_kpis(db: Session, owner_id: int = None):
     # )
     total_stock = sum(s[0] for s in inv_q.with_entities(Inventory.stock).all())
 
-    crit_q = db.query(Inventory).join(Inventory.warehouse).filter(Warehouse.type == "principal", Inventory.stock <= 5)
+    crit_q = db.query(Inventory).join(Inventory.warehouse).filter(
+        Warehouse.type == "principal",
+        Inventory.stock <= 5,
+        Inventory.is_active == True,
+    )
     if wh_filter_ids is not None:
         crit_q = crit_q.filter(Inventory.warehouse_id.in_(wh_filter_ids))
     critical = crit_q.count()

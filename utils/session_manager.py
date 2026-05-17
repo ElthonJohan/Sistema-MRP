@@ -130,7 +130,7 @@ def init_session() -> bool:
 
 
 def logout_session() -> None:
-    """Elimina la sesión de la DB, limpia session_state + URL y recarga."""
+    """Elimina la sesión de la DB, limpia TODO el session_state + URL y redirige al login."""
     token = st.session_state.get("session_token")
     if token:
         db = SessionLocal()
@@ -138,8 +138,10 @@ def logout_session() -> None:
             delete_session(db, token)
         finally:
             db.close()
-    _clear_state()
     _remove_token_from_url()
+    # Limpia TODO el estado (incluido estado de expansión del sidebar) para evitar
+    # que la barra lateral reaparezca al navegar a login tras cerrar sesión.
+    st.session_state.clear()
     st.switch_page("pages/login.py")
 
 

@@ -4,12 +4,13 @@ from models.requirement import Requirement, RequirementItem
 from services.inventory_service import reserve_stock
 from datetime import datetime
 
-def create_requirement(db: Session, warehouse_id, items):
+def create_requirement(db: Session, warehouse_id, items, budget_id=None):
     """
     items = [
         {"material_id": 1, "qty": 10},
         {"material_id": 2, "qty": 5}
     ]
+    budget_id: opcional, vincula el requerimiento a un proyecto.
     """
 
     obra = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
@@ -24,10 +25,21 @@ def create_requirement(db: Session, warehouse_id, items):
     if not principal_warehouse:
         return False, "No hay almacén principal configurado. Por favor crea uno primero."
 
+    if not budget_id:
+        return False, "Debes seleccionar un proyecto. El proyecto es obligatorio."
+
+    from models.budget import Budget
+    _bud = db.query(Budget).filter(Budget.id == budget_id).first()
+    if not _bud:
+        return False, "El proyecto seleccionado no existe."
+    budget_name = _bud.name
+
     requirement = Requirement(
         warehouse_id_obra=warehouse_id,
         created_at=datetime.now(),
-        status="pending"
+        status="pending",
+        budget_id=budget_id,
+        budget_name=budget_name,
     )
 
     db.add(requirement)
@@ -110,7 +122,7 @@ def get_requirement_detail(db: Session, requirement_id):
     
 from services.inventory_service import release_reservation
 
-def cancel_requirement(db: Session, requirement_id):
+def cancel_requirement(db: Session, requirement_id, reason: str = None):
     req = get_requirement_detail(db, requirement_id)
 
     if not req:
@@ -135,6 +147,8 @@ def cancel_requirement(db: Session, requirement_id):
             )
 
     req.status = "cancelled"
+    if reason:
+        req.notes = reason
     db.commit()
     return True
 

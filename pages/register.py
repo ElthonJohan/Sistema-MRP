@@ -1,21 +1,15 @@
 # -*- coding: utf-8 -*-
+import re
 import streamlit as st
 from database import SessionLocal
-from services.auth_service import login_user
-from services.login_log_service import log_login
-from services.session_service import create_session
+from services.auth_service import register_user
 from utils.session_manager import init_session
 
 st.set_page_config(
-    page_title="Acceso — Sistema MRP Polyline",
+    page_title="Crear cuenta — Sistema MRP Polyline",
     layout="centered",
     initial_sidebar_state="collapsed",
 )
-
-if "login_attempts" not in st.session_state:
-    st.session_state.login_attempts = 0
-
-MAX_ATTEMPTS = 5
 
 # ── Redirigir si ya hay sesión activa ─────────────────────────────────────────
 _db_early = SessionLocal()
@@ -28,12 +22,24 @@ if init_session():
     st.stop()
 _db_early.close()
 
+def _password_strength(pwd: str) -> int:
+    if not pwd:
+        return 0
+    if len(pwd) >= 10:
+        return 100
+    score = 0
+    if len(pwd) >= 8:                     score += 25
+    if re.search(r'[a-z]', pwd):          score += 20
+    if re.search(r'[A-Z]', pwd):          score += 20
+    if re.search(r'\d',    pwd):          score += 20
+    if re.search(r'[^a-zA-Z\d\s]', pwd): score += 15
+    return min(score, 100)
+
 st.markdown("""
 <style>
 /* ── Overlay de transición — cubre el flash del sidebar al entrar o al re-renderizar ── */
 @keyframes _mrp_overlay_out {
     0%   { opacity: 1; }
-    55%  { opacity: 1; }
     100% { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 #_mrp_pg_cover {
@@ -41,7 +47,7 @@ st.markdown("""
     background: #040b16;
     z-index: 999999 !important;
     pointer-events: none !important;
-    animation: _mrp_overlay_out 0.32s ease-out 0s forwards !important;
+    animation: _mrp_overlay_out 0.08s ease-out 0.01s forwards !important;
 }
 
 /* ── Reset total + sidebar forzado completamente fuera del layout ── */
@@ -66,7 +72,7 @@ h1 a,h2 a,h3 a,.anchor-link { display: none !important; }
     background: transparent !important; border: none !important; box-shadow: none !important;
 }
 
-/* ── Fondo ── */
+/* ── Fondo (mismo que login) ── */
 .stApp {
     background-image:
         radial-gradient(ellipse 700px 500px at 50% -60px,rgba(37,99,235,.16) 0%,transparent 65%),
@@ -84,9 +90,9 @@ h1 a,h2 a,h3 a,.anchor-link { display: none !important; }
 .block-container {
     position: relative; z-index: 1;
     max-width: 420px !important; width: 100% !important;
-    height: 640px !important;
-    padding: 0 0 2.4rem 0 !important;
-    margin-top: 4vh !important; margin-bottom: 4vh !important;
+    height: 830px !important;
+    padding: 0 1rem 2.4rem !important;
+    margin-top: 3vh !important; margin-bottom: 3vh !important;
     background: rgba(6,13,28,.72) !important;
     border: 1px solid rgba(255,255,255,.090) !important;
     border-radius: 24px !important;
@@ -105,29 +111,29 @@ p,span,li,label,div { color: #e2e8f0; }
 /* ── Animaciones ── */
 @keyframes fadeUp { from { opacity:0;transform:translateY(14px); } to { opacity:1;transform:translateY(0); } }
 @keyframes pulse-ring {
-    0%,100% { box-shadow:0 0 0 0 rgba(37,99,235,.22),0 6px 20px rgba(37,99,235,.32); }
-    50%      { box-shadow:0 0 0 5px rgba(37,99,235,.0),0 6px 20px rgba(37,99,235,.32); }
+    0%,100% { box-shadow:0 0 0 0 rgba(79,70,229,.22),0 6px 20px rgba(79,70,229,.32); }
+    50%      { box-shadow:0 0 0 5px rgba(79,70,229,.0),0 6px 20px rgba(79,70,229,.32); }
 }
 
 /* ── Hero ── */
-.login-hero { display:flex;flex-direction:column;align-items:center;gap:.8rem;padding:2.4rem 2rem 1.4rem;animation:fadeUp .22s cubic-bezier(.22,1,.36,1) forwards; }
+.reg-hero { display:flex;flex-direction:column;align-items:center;gap:.8rem;padding:2.2rem 1rem 1.2rem;animation:fadeUp .22s cubic-bezier(.22,1,.36,1) forwards; }
 .hero-icon-outer {
     display:inline-flex;align-items:center;justify-content:center;
     width:64px;height:64px;border-radius:18px;
-    background:linear-gradient(140deg,#1e3a8a 0%,#2563eb 55%,#4f46e5 100%);
-    box-shadow:0 0 0 1px rgba(99,102,241,.16),0 0 0 5px rgba(37,99,235,.06),0 6px 20px rgba(37,99,235,.32);
+    background:linear-gradient(140deg,#2e1065 0%,#4f46e5 55%,#7c3aed 100%);
+    box-shadow:0 0 0 1px rgba(99,102,241,.16),0 0 0 5px rgba(79,70,229,.06),0 6px 20px rgba(79,70,229,.32);
     flex-shrink:0;animation:pulse-ring 3.2s ease-in-out infinite;
 }
 .hero-icon-outer svg { width:28px;height:28px;stroke:#fff;fill:none;stroke-linecap:round;stroke-linejoin:round; }
-.hero-badge { display:inline-flex;align-items:center;gap:.5rem;padding:.28rem .95rem .28rem .65rem;border-radius:100px;background:rgba(37,99,235,.10);border:1px solid rgba(37,99,235,.24); }
-.hero-badge-dot { width:6px;height:6px;border-radius:50%;background:#3b82f6;box-shadow:0 0 6px rgba(59,130,246,.8);flex-shrink:0; }
-.hero-badge-text { font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.18em;color:#60a5fa; }
+.hero-badge { display:inline-flex;align-items:center;gap:.5rem;padding:.28rem .95rem .28rem .65rem;border-radius:100px;background:rgba(79,70,229,.10);border:1px solid rgba(99,102,241,.24); }
+.hero-badge-dot { width:6px;height:6px;border-radius:50%;background:#818cf8;box-shadow:0 0 6px rgba(129,140,248,.8);flex-shrink:0; }
+.hero-badge-text { font-size:.64rem;font-weight:800;text-transform:uppercase;letter-spacing:.18em;color:#a5b4fc; }
 .hero-text-group { display:flex;flex-direction:column;align-items:center;gap:.35rem; }
-.hero-title { font-size:1.8rem;font-weight:800;background:linear-gradient(140deg,#f8fafc 20%,#cbd5e1 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-.6px;margin:0;line-height:1.12; }
+.hero-title { font-size:1.7rem;font-weight:800;background:linear-gradient(140deg,#f8fafc 20%,#cbd5e1 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-.6px;margin:0;line-height:1.12; }
 .hero-sub { font-size:.76rem;color:#64748b;margin:0;letter-spacing:.015em;line-height:1.5; }
 
 /* ── Divisor ── */
-.form-divider { display:flex;align-items:center;gap:.6rem;margin:.4rem 0 .8rem;padding:0 2rem; }
+.form-divider { display:flex;align-items:center;gap:.6rem;margin:.4rem 0 .8rem;padding:0 1rem; }
 .form-divider-line { flex:1;height:1px;background:rgba(255,255,255,.065); }
 .form-divider-label { font-size:.60rem;font-weight:700;text-transform:uppercase;letter-spacing:.16em;color:#2d3f56; }
 
@@ -143,7 +149,7 @@ label[data-testid="stWidgetLabel"] p { font-size:.76rem !important;font-weight:7
     width:100% !important;min-height:2.6rem !important;
     transition:border-color .18s,box-shadow .18s !important;
 }
-[data-baseweb="input"] > div:focus-within { border-color:rgba(37,99,235,.55) !important;box-shadow:0 0 0 3px rgba(37,99,235,.10) !important; }
+[data-baseweb="input"] > div:focus-within { border-color:rgba(99,102,241,.55) !important;box-shadow:0 0 0 3px rgba(99,102,241,.10) !important; }
 [data-baseweb="input"] input { color:#e2e8f0 !important;background:transparent !important;font-size:.875rem !important;border:none !important;outline:none !important;box-shadow:none !important;width:100% !important; }
 [data-baseweb="input"] input[type="password"] { padding-right:2.2rem !important; }
 [data-baseweb="input"] input::placeholder { color:#253347 !important; }
@@ -162,43 +168,50 @@ label[data-testid="stWidgetLabel"] p { font-size:.76rem !important;font-weight:7
     display:flex !important;align-items:center !important;justify-content:center !important;
 }
 [data-baseweb="input"] button:hover { color:#5d7a96 !important; }
-.stTextInput { margin:0 0 .6rem 0 !important; }
+.stTextInput { margin:0 0 .5rem 0 !important; }
+
+/* ── Barra de fortaleza ── */
+.strength-wrap { margin:.05rem 0 .6rem;width:100%; }
+.strength-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:.26rem; }
+.strength-section-label { font-size:.60rem;font-weight:700;letter-spacing:.10em;text-transform:uppercase;color:#2d3f56; }
+.strength-track { background:rgba(255,255,255,.06);border-radius:100px;height:3.5px;overflow:hidden; }
+.strength-fill { height:100%;border-radius:100px;transition:width .4s cubic-bezier(.4,0,.2,1),background .4s ease; }
 
 /* ── Botón primario ── */
-[data-testid="stFormSubmitButton"] button,[data-testid="stBaseButton-primary"] {
-    background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%) !important;
+[data-testid="stBaseButton-primary"] {
+    background:linear-gradient(135deg,#4f46e5 0%,#3730a3 100%) !important;
     color:#fff !important;border:none !important;border-radius:10px !important;
     font-size:.875rem !important;font-weight:700 !important;letter-spacing:.04em !important;
     width:100% !important;padding:.76rem !important;
-    box-shadow:0 2px 18px rgba(37,99,235,.36) !important;
+    box-shadow:0 2px 18px rgba(79,70,229,.36) !important;
     transition:opacity .15s,transform .13s !important;
-    margin-top:.55rem !important;margin-bottom:.5rem !important;
+    margin-top:.45rem !important;margin-bottom:.4rem !important;
 }
-[data-testid="stFormSubmitButton"] button:hover,[data-testid="stBaseButton-primary"]:hover {
+[data-testid="stBaseButton-primary"]:hover {
     opacity:.92 !important;transform:translateY(-1px) !important;
-    box-shadow:0 6px 24px rgba(37,99,235,.46) !important;
+    box-shadow:0 6px 24px rgba(79,70,229,.46) !important;
 }
 
-/* ── Enlace a registro ── */
-[data-testid="stPageLink"] { margin:0 0 .5rem !important; }
-[data-testid="stPageLink"] a {
-    display:flex !important;justify-content:center !important;
-    font-size:.82rem !important;font-weight:600 !important;color:#60a5fa !important;
-    text-decoration:none !important;opacity:.75 !important;
-    transition:opacity .15s !important;
+/* ── Botón secundario (Volver) ── */
+[data-testid="stBaseButton-secondary"] {
+    background:rgba(255,255,255,.04) !important;
+    color:rgba(226,232,240,.65) !important;border:1px solid rgba(255,255,255,.09) !important;
+    border-radius:10px !important;
+    font-size:.82rem !important;font-weight:600 !important;
+    width:100% !important;padding:.62rem !important;
+    transition:all .15s !important;
+    margin-bottom:.5rem !important;
 }
-[data-testid="stPageLink"] a:hover { opacity:1 !important; }
+[data-testid="stBaseButton-secondary"]:hover {
+    background:rgba(255,255,255,.09) !important;
+    color:#e2e8f0 !important;border-color:rgba(255,255,255,.18) !important;
+}
 
 /* ── Info note ── */
 .info-note { display:flex;align-items:flex-start;gap:.55rem;padding:.58rem .9rem;border-radius:10px;background:rgba(6,13,28,.45) !important;border:1px solid rgba(255,255,255,.09) !important;margin-top:.3rem;backdrop-filter:blur(12px) !important; }
 .info-note svg { flex-shrink:0;margin-top:1px;opacity:.35; }
 .info-note-text { font-size:.69rem;color:#3d5269;line-height:1.58; }
 .info-note-text strong { color:#4d6580; }
-
-/* ── Warn banner ── */
-.warn-banner { display:flex;align-items:flex-start;gap:.6rem;padding:.6rem .9rem;border-radius:10px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.16);margin-bottom:.7rem;animation:fadeUp .2s ease; }
-.warn-banner svg { flex-shrink:0;margin-top:1px; }
-.warn-banner-text { font-size:.72rem;color:#d97706;font-weight:600;line-height:1.45; }
 
 /* ── Alerts ── */
 [data-testid="stAlert"] { border-radius:10px !important;background:rgba(255,255,255,.03) !important; }
@@ -210,43 +223,19 @@ label[data-testid="stWidgetLabel"] p { font-size:.76rem !important;font-weight:7
     margin-left:0 !important;margin-right:0 !important;
     width:100% !important;box-sizing:border-box !important;
 }
-[data-testid="stForm"],[data-testid="stForm"] .stTextInput,
-[data-testid="stForm"] [data-testid="stFormSubmitButton"] button {
-    max-width:100% !important;width:100% !important;margin-left:0 !important;margin-right:0 !important;
-}
 </style>
 <div id="_mrp_pg_cover"></div>
 """, unsafe_allow_html=True)
 
-# ── Segunda verificación de sesión ────────────────────────────────────────────
-for _k, _v in [("logged_in", False), ("user_id", None), ("username", None), ("session_token", None)]:
-    st.session_state.setdefault(_k, _v)
-
-db = SessionLocal()
-if init_session():
-    db.close()
-    dest = "pages/admin.py" if st.session_state.get("role") == "superadmin" else "pages/dashboard.py"
-    st.switch_page(dest)
-    st.stop()
-
-# ── Banner de registro exitoso ────────────────────────────────────────────────
-if st.session_state.get("register_success"):
-    st.success("Cuenta creada exitosamente. Inicia sesion con tus credenciales.")
-    st.session_state.register_success = False
-
 # ── Hero ──────────────────────────────────────────────────────────────────────
 st.markdown("""
-<div class="login-hero">
+<div class="reg-hero">
   <div class="hero-icon-outer">
     <svg viewBox="0 0 24 24" stroke-width="1.9">
-      <rect x="2" y="3" width="20" height="14" rx="2.5"/>
-      <path d="M8 21h8M12 17v4"/>
-      <polyline points="5 13 8.5 9 12 11.5 16 7 19 9.5" stroke-width="1.75"/>
-      <circle cx="5"  cy="13"  r="1.1" fill="white" stroke="none"/>
-      <circle cx="8.5" cy="9"  r="1.1" fill="white" stroke="none"/>
-      <circle cx="12" cy="11.5" r="1.1" fill="white" stroke="none"/>
-      <circle cx="16" cy="7"  r="1.1" fill="white" stroke="none"/>
-      <circle cx="19" cy="9.5" r="1.1" fill="white" stroke="none"/>
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+      <line x1="19" y1="8" x2="19" y2="14"/>
+      <line x1="16" y1="11" x2="22" y2="11"/>
     </svg>
   </div>
   <div class="hero-badge">
@@ -254,83 +243,91 @@ st.markdown("""
     <span class="hero-badge-text">Sistema MRP Polyline</span>
   </div>
   <div class="hero-text-group">
-    <div class="hero-title">Bienvenido</div>
-    <p class="hero-sub">Gestión de recursos y planificación de materiales</p>
+    <div class="hero-title">Crear cuenta</div>
+    <p class="hero-sub">Completa los datos para acceder al sistema</p>
   </div>
 </div>
 """, unsafe_allow_html=True)
-
-# ── Advertencia de intentos ───────────────────────────────────────────────────
-attempts = st.session_state.login_attempts
-if attempts >= 2:
-    remaining = MAX_ATTEMPTS - attempts
-    s = "s" if remaining != 1 else ""
-    st.markdown(f"""
-    <div class="warn-banner">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="#d97706" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>
-      <span class="warn-banner-text">
-        {remaining} intento{s} restante{s} antes del bloqueo de 15 minutos.
-      </span>
-    </div>""", unsafe_allow_html=True)
 
 # ── Divisor ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="form-divider">
   <span class="form-divider-line"></span>
-  <span class="form-divider-label">Credenciales</span>
+  <span class="form-divider-label">Datos de acceso</span>
   <span class="form-divider-line"></span>
 </div>""", unsafe_allow_html=True)
 
-# ── Formulario de login ───────────────────────────────────────────────────────
-with st.form("login_form", clear_on_submit=False):
-    username = st.text_input("Usuario o correo electronico", placeholder="usuario o email")
-    password = st.text_input("Contraseña", type="password", placeholder="••••••••••")
-    submit_login = st.form_submit_button("Continuar", use_container_width=True)
+# ── Formulario de registro ────────────────────────────────────────────────────
+reg_username = st.text_input("Usuario", placeholder="3-20 caracteres (letras, numeros, _)", key="reg_user")
+reg_email    = st.text_input("Correo electronico", placeholder="ejemplo@empresa.com", key="reg_email")
+reg_password = st.text_input("Contrasena", type="password", placeholder="Minimo 8 caracteres", key="reg_pwd")
 
-if submit_login:
-    if not username or not password:
+# ── Barra de fortaleza ────────────────────────────────────────────────────────
+strength = _password_strength(reg_password)
+if strength == 0:
+    bar_color = "transparent"; bar_label = ""; lbl_color = "#334155"
+elif strength < 40:
+    bar_color = "#ef4444"; bar_label = "Insegura"; lbl_color = "#ef4444"
+elif strength < 70:
+    bar_color = "#f59e0b"; bar_label = "Moderada"; lbl_color = "#d97706"
+else:
+    bar_color = "#22c55e"
+    bar_label = "Muy segura" if strength == 100 else "Segura"
+    lbl_color = "#16a34a"
+
+st.markdown(f"""
+<div class="strength-wrap">
+  <div class="strength-header">
+    <span class="strength-section-label">Seguridad de la contrasena</span>
+    <span style="font-size:.68rem;font-weight:700;color:{lbl_color};transition:color .35s;">{bar_label}</span>
+  </div>
+  <div class="strength-track">
+    <div class="strength-fill" style="width:{strength}%;background:{bar_color};"></div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+reg_password2 = st.text_input("Confirmar contrasena", type="password", placeholder="Repite la contrasena", key="reg_pwd2")
+
+# ── Botón crear cuenta ────────────────────────────────────────────────────────
+if st.button("Crear cuenta", use_container_width=True, type="primary", key="btn_create"):
+    u  = st.session_state.get("reg_user",  "").strip()
+    e  = st.session_state.get("reg_email", "").strip()
+    p1 = st.session_state.get("reg_pwd",   "")
+    p2 = st.session_state.get("reg_pwd2",  "")
+
+    if not u or not e or not p1 or not p2:
         st.error("Completa todos los campos.")
+    elif p1 != p2:
+        st.error("Las contrasenas no coinciden.")
     else:
-        with st.spinner("Verificando..."):
-            success, user, msg = login_user(db, username, password)
-        if success:
-            st.session_state.login_attempts = 0
-            log_login(db, user.id, user.username)
-            token = create_session(db, user.id, user.username, role=user.role)
-            st.session_state.logged_in     = True
-            st.session_state.user_id       = user.id
-            st.session_state.username      = user.username
-            st.session_state.role          = user.role
-            st.session_state.session_token = token
-            db.close()
-            if user.role == "superadmin":
-                st.switch_page("pages/admin.py")
-            else:
-                st.switch_page("pages/dashboard.py")
+        db = SessionLocal()
+        with st.spinner("Creando cuenta..."):
+            ok, msg = register_user(db, username=u, email=e, password=p1, password_confirm=p2, role="cliente")
+        db.close()
+        if ok:
+            for k in ["reg_user", "reg_email", "reg_pwd", "reg_pwd2"]:
+                st.session_state.pop(k, None)
+            st.session_state.register_success = True
+            st.switch_page("pages/login.py")
         else:
-            st.session_state.login_attempts += 1
             st.error(msg)
 
-# ── Enlace a registro ─────────────────────────────────────────────────────────
-st.page_link("pages/register.py", label="¿No tienes cuenta? Crear cuenta →")
+# ── Botón volver al login ─────────────────────────────────────────────────────
+if st.button("← Volver al inicio de sesion", use_container_width=True, type="secondary", key="btn_back"):
+    st.switch_page("pages/login.py")
 
 # ── Nota informativa ─────────────────────────────────────────────────────────
 st.markdown("""
 <div class="info-note">
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
        stroke="#64748b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="12" y1="8" x2="12" y2="12"/>
-    <line x1="12" y1="16" x2="12.01" y2="16"/>
+    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
   </svg>
   <span class="info-note-text">
-    La cuenta se bloquea <strong>15 minutos</strong> tras 5 intentos fallidos.
-    Puedes ingresar con <strong>usuario o correo</strong>.
+    Al registrarte obtienes acceso como <strong>cliente</strong>.
+    Ya tienes cuenta? Ve a <strong>Iniciar sesion</strong>.
   </span>
 </div>""", unsafe_allow_html=True)
-
-db.close()

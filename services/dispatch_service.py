@@ -60,12 +60,13 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
             material_name = req_item.material.name if req_item.material else f"Material {material_id}"
             return False, f"Material '{material_name}' no tiene stock reservado. Ve a Inventario para agregar stock al almacén principal."
         
-        inventory = db.query(Inventory).filter(
+        all_inv_check = db.query(Inventory).filter(
             Inventory.warehouse_id == principal.id,
             Inventory.material_id == material_id,
-        ).first()
+        ).all()
+        total_principal_stock = sum(inv.stock for inv in all_inv_check)
 
-        if not inventory or inventory.stock < qty:
+        if total_principal_stock < qty:
             return False, "Stock insuficiente en el almacén principal para completar el despacho"
 
     # ── Fase 2: crear despacho y aplicar cambios en un solo commit ─────────────
@@ -92,12 +93,25 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
         if not req_item:
             continue
 
-        inventory = get_or_create_inventory(db, principal.id, material_id)
+        # Distribute stock and reserved reduction across all budget records (FIFO)
+        all_inv = db.query(Inventory).filter(
+            Inventory.warehouse_id == principal.id,
+            Inventory.material_id == material_id,
+        ).order_by(Inventory.id).all()
 
-        inventory.stock -= qty
-        inventory.reserved -= qty
-        if inventory.reserved < 0:
-            inventory.reserved = 0
+        remaining_s = qty
+        remaining_r = qty
+        for inv in all_inv:
+            if remaining_s <= 0 and remaining_r <= 0:
+                break
+            if remaining_s > 0:
+                reduce_s = min(inv.stock, remaining_s)
+                inv.stock -= reduce_s
+                remaining_s -= reduce_s
+            if remaining_r > 0:
+                reduce_r = min(inv.reserved, remaining_r)
+                inv.reserved -= reduce_r
+                remaining_r -= reduce_r
 
         req_item.fulfilled_qty += qty
         if req_item.fulfilled_qty >= req_item.requested_qty:
@@ -144,10 +158,14 @@ def cancel_dispatch(db: Session, dispatch_id):
     if not dispatch:
         return False
 
+    _req = dispatch.requirement
+    _bud_id   = getattr(_req, "budget_id", None) if _req else None
+    _bud_name = getattr(_req, "budget_name", None) if _req else None
     for item in dispatch.items:
-        # Revertir inventario
+        # Revertir inventario (mismo proyecto que el requerimiento, si aplica)
         inventory = get_or_create_inventory(
-            db, dispatch.requirement.warehouse_id_obra, item.material_id
+            db, _req.warehouse_id_obra, item.material_id,
+            budget_id=_bud_id, budget_name=_bud_name,
         )
         inventory.stock += item.dispatched_qty
 

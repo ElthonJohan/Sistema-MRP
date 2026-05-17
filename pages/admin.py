@@ -25,6 +25,9 @@ from services.auth_service import (
 from services.session_service import delete_user_sessions
 from utils.auth import require_superadmin
 from utils.navbar import render_navbar, render_sidebar_menu
+from models.movement import Movement
+from models.warehouse import Warehouse
+from models.material import Material
 
 st.set_page_config(
     page_title="Panel Admin — Sistema MRP",
@@ -131,7 +134,7 @@ st.markdown("""
                    font-size:.68rem; font-weight:700;
                    background:rgba(220,38,38,.15); color:#f87171; }
 
-/* ── Botón "Visualizar" (secondary) — estilo ámbar ── */
+/* ── Botones secondary — estilo ámbar (Visualizar) ── */
 [data-testid="stBaseButton-secondary"] {
     background: rgba(245,158,11,.10) !important;
     color: #fbbf24 !important;
@@ -144,6 +147,48 @@ st.markdown("""
     background: rgba(245,158,11,.20) !important;
     box-shadow: 0 2px 10px rgba(245,158,11,.22) !important;
     color: #fde68a !important;
+}
+
+/* ── Historial de movimientos ── */
+.moves-wrap {
+    border: 1px solid rgba(99,102,241,.18);
+    border-radius: 14px;
+    background: rgba(99,102,241,.04);
+    padding: .65rem .9rem .5rem;
+    margin: .15rem 0 .3rem;
+}
+.moves-title {
+    font-size: .76rem; font-weight: 700; color: #a5b4fc;
+    margin-bottom: .55rem; display: flex; align-items: center; gap: .4rem;
+}
+.move-card {
+    display: flex; align-items: center; gap: .65rem;
+    padding: .62rem .95rem; border-radius: 12px;
+    border: 1px solid rgba(99,102,241,.18);
+    background: linear-gradient(135deg, rgba(99,102,241,.07), rgba(99,102,241,.02));
+    margin-bottom: .42rem; font-size: .74rem;
+    transition: background .12s, border-color .12s;
+    flex-wrap: wrap;
+}
+.move-card:hover {
+    background: linear-gradient(135deg, rgba(99,102,241,.12), rgba(99,102,241,.05));
+    border-color: rgba(99,102,241,.30);
+}
+.move-badge-in  { padding:.14rem .48rem; border-radius:20px; font-size:.63rem; font-weight:800;
+                  background:rgba(34,197,94,.16); color:#4ade80; border:1px solid rgba(34,197,94,.25);
+                  white-space:nowrap; flex-shrink:0; }
+.move-badge-out { padding:.14rem .48rem; border-radius:20px; font-size:.63rem; font-weight:800;
+                  background:rgba(239,68,68,.16); color:#f87171; border:1px solid rgba(239,68,68,.25);
+                  white-space:nowrap; flex-shrink:0; }
+.move-mat  { flex:1; color:#e2e8f0; font-weight:700; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.move-qty  { color:#a5b4fc; font-weight:700; white-space:nowrap; flex-shrink:0; }
+.move-wh   { color:rgba(148,163,184,.58); font-size:.69rem; white-space:nowrap; flex-shrink:0; }
+.move-ts   { color:rgba(148,163,184,.40); font-size:.65rem; white-space:nowrap; flex-shrink:0; }
+.move-ref  { padding:.06rem .38rem; border-radius:9px; font-size:.60rem; font-weight:700;
+             background:rgba(148,163,184,.10); color:rgba(148,163,184,.50); white-space:nowrap; flex-shrink:0; }
+.mv-pag-info {
+    text-align: center; font-size: .72rem; color: rgba(148,163,184,.50);
+    font-weight: 600; padding: .25rem 0;
 }
 
 /* ── Formulario de edición ── */
@@ -311,6 +356,30 @@ k3.markdown(f"""<div class="akpi ak-red">
   <div class="akpi-sub">Sin acceso al sistema</div>
 </div>""", unsafe_allow_html=True)
 
+# ── Instrucciones ─────────────────────────────────────────────────────────────
+_, _col_help_admin = st.columns([7, 1.5])
+with _col_help_admin.popover("📋 Instrucciones", use_container_width=True):
+    st.markdown("#### Guía del Panel de Administración")
+    st.markdown("""
+**Crear cliente** — Registra una nueva cuenta de tipo cliente con usuario, correo y contraseña. Los requisitos de contraseña se verifican en tiempo real.
+
+**Deshabilitar / Habilitar** — Controla el acceso de un cliente al sistema sin eliminar su cuenta ni sus datos.
+
+**Editar** — Modifica el usuario, correo o contraseña de un cliente existente. Si se cambia el usuario, sus sesiones activas se cierran automáticamente.
+
+**Visualizar** — Accede al sistema como si fuera ese cliente (impersonación). Verás sus datos y podrás operar en su nombre. Aparece un banner naranja de aviso.
+
+**Movimientos** — Consulta el historial de entradas y salidas de inventario del cliente (últimos 50 registros).
+
+**Eliminar** — Elimina permanentemente la cuenta del cliente y todos sus datos asociados. Esta acción no se puede deshacer.
+
+---
+
+**Seguridad de contraseña:**
+- Mínimo 8 caracteres
+- Recomendado: mayúsculas, minúsculas, números y símbolos
+""")
+
 # ── Crear cliente ─────────────────────────────────────────────────────────────
 st.markdown('<div class="sec-title">&#43; Crear nuevo cliente</div>', unsafe_allow_html=True)
 
@@ -394,7 +463,7 @@ else:
                     else '<span class="badge-inactive">Deshabilitado</span>'
             fecha = cliente.created_at.strftime("%d/%m/%Y") if cliente.created_at else "—"
 
-            col_info, col_estado, col_edit, col_view, col_actions = st.columns([4, 2, 2, 2, 2])
+            col_info, col_estado, col_edit, col_view, col_moves, col_actions = st.columns([4, 2, 2, 2, 2, 2])
 
             with col_info:
                 st.markdown(f"""
@@ -436,6 +505,17 @@ else:
                     st.session_state["impersonating_username"] = cliente.username
                     st.switch_page("pages/dashboard.py")
 
+            with col_moves:
+                st.write("")
+                is_moves_open = st.session_state.get(f"show_moves_{cliente.id}", False)
+                moves_label   = "Cerrar ✕" if is_moves_open else "Movimientos"
+                if st.button(moves_label, key=f"moves_btn_{cliente.id}", use_container_width=True):
+                    new_state = not is_moves_open
+                    st.session_state[f"show_moves_{cliente.id}"] = new_state
+                    if new_state:
+                        st.session_state[f"moves_page_{cliente.id}"] = 0
+                    st.rerun()
+
             with col_actions:
                 st.write("")
                 if st.button("Eliminar", key=f"delete_{cliente.id}", use_container_width=True, type="primary"):
@@ -455,6 +535,110 @@ else:
                         if st.button("Cancelar", key=f"no_{cliente.id}", use_container_width=True, type="primary"):
                             st.session_state.pop(f"confirm_delete_{cliente.id}", None)
                             st.rerun()
+
+            # ── Historial de movimientos (paginado) ───────────────────────────
+            if st.session_state.get(f"show_moves_{cliente.id}"):
+                _MV_PER_PAGE  = 10
+                _mv_page      = int(st.session_state.get(f"moves_page_{cliente.id}", 0))
+
+                _total_mvs = (
+                    db.query(Movement)
+                    .join(Warehouse, Movement.warehouse_id == Warehouse.id)
+                    .filter(Warehouse.owner_id == cliente.id)
+                    .count()
+                )
+                _mv_total_pages = max(1, (_total_mvs + _MV_PER_PAGE - 1) // _MV_PER_PAGE)
+                _mv_page        = min(_mv_page, _mv_total_pages - 1)
+
+                user_movements = (
+                    db.query(Movement)
+                    .join(Warehouse, Movement.warehouse_id == Warehouse.id)
+                    .filter(Warehouse.owner_id == cliente.id)
+                    .order_by(Movement.timestamp.desc())
+                    .offset(_mv_page * _MV_PER_PAGE)
+                    .limit(_MV_PER_PAGE)
+                    .all()
+                )
+                mat_ids  = {m.material_id for m in user_movements if m.material_id}
+                mat_map  = {
+                    mat.id: mat.name
+                    for mat in db.query(Material).filter(Material.id.in_(mat_ids)).all()
+                } if mat_ids else {}
+                wh_ids   = {m.warehouse_id for m in user_movements if m.warehouse_id}
+                wh_map   = {
+                    wh.id: wh.name
+                    for wh in db.query(Warehouse).filter(Warehouse.id.in_(wh_ids)).all()
+                } if wh_ids else {}
+
+                _REF_LABELS = {
+                    "manual":             "Ingreso manual",
+                    "dispatch":           "Despacho",
+                    "receipt":            "Recepción",
+                    "material_eliminado": "Material eliminado",
+                }
+
+                if _total_mvs == 0:
+                    rows_html = '<div style="font-size:.78rem;color:rgba(148,163,184,.55);padding:.4rem 0;">Sin movimientos registrados.</div>'
+                else:
+                    rows = []
+                    for mv in user_movements:
+                        badge = '<span class="move-badge-in">ENTRADA</span>' \
+                                if mv.movement_type == "IN" else \
+                                '<span class="move-badge-out">SALIDA</span>'
+                        if mv.material_id is None:
+                            mat_name = "Material eliminado"
+                        else:
+                            mat_name = mat_map.get(mv.material_id, "Material eliminado")
+                        wh_name  = wh_map.get(mv.warehouse_id, f"Almacén #{mv.warehouse_id}")
+                        qty_abs  = abs(mv.qty_change) if mv.qty_change is not None else 0
+                        qty_sign = f"+{qty_abs}" if mv.movement_type == "IN" else f"-{qty_abs}"
+                        ts_str   = mv.timestamp.strftime("%d/%m/%Y %H:%M") if mv.timestamp else "—"
+                        if mv.reference_type == "dispatch" and mv.reference_id:
+                            ref_lbl = f"Despacho #{mv.reference_id}"
+                        elif mv.reference_type == "receipt" and mv.reference_id:
+                            ref_lbl = f"Recepción #{mv.reference_id}"
+                        else:
+                            ref_lbl = _REF_LABELS.get(mv.reference_type or "", "")
+                        ref_html = f'<span class="move-ref">{ref_lbl}</span>' if ref_lbl else ""
+                        rows.append(
+                            f'<div class="move-card">{badge}'
+                            f'<span class="move-mat">{mat_name}</span>'
+                            f'<span class="move-qty">{qty_sign} u.</span>'
+                            f'<span class="move-wh">· {wh_name}</span>'
+                            f'{ref_html}'
+                            f'<span class="move-ts">{ts_str}</span>'
+                            f'</div>'
+                        )
+                    rows_html = "".join(rows)
+
+                st.markdown(
+                    f'<div class="moves-wrap">'
+                    f'<div class="moves-title">&#128200; Historial de movimientos — {cliente.username}</div>'
+                    f'{rows_html}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                if _mv_total_pages > 1:
+                    _mv_prev_col, _mv_info_col, _mv_next_col = st.columns([1, 3, 1])
+                    _mv_info_col.markdown(
+                        f"<div class='mv-pag-info'>"
+                        f"Página {_mv_page + 1} de {_mv_total_pages}"
+                        f" &nbsp;·&nbsp; {_total_mvs} movimientos</div>",
+                        unsafe_allow_html=True,
+                    )
+                    if _mv_prev_col.button(
+                        "← Ant.", key=f"mv_prev_{cliente.id}",
+                        disabled=(_mv_page == 0), use_container_width=True
+                    ):
+                        st.session_state[f"moves_page_{cliente.id}"] = _mv_page - 1
+                        st.rerun()
+                    if _mv_next_col.button(
+                        "Sig. →", key=f"mv_next_{cliente.id}",
+                        disabled=(_mv_page == _mv_total_pages - 1), use_container_width=True
+                    ):
+                        st.session_state[f"moves_page_{cliente.id}"] = _mv_page + 1
+                        st.rerun()
 
             # ── Formulario de edición de credenciales ─────────────────────────
             if st.session_state.get(f"show_edit_{cliente.id}"):
