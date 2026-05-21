@@ -14,6 +14,14 @@ from services.budget_service import (
     get_dispatch_costs,
     get_movement_summary,
     count_budget_inventory,
+    deactivate_budget_with_reason,
+    confirm_reactivation,
+    extend_reactivation,
+    get_extension_history,
+)
+from services.inventory_service import (
+    get_floating_consumed, get_locked_consumed,
+    get_lost_consumed, get_pending_deleted_consumed,
 )
 from utils.auth import require_superadmin
 from utils.navbar import render_navbar, render_sidebar_menu
@@ -511,12 +519,30 @@ st.markdown('<div class="sec-title">&#128203; Proyectos Registrados</div>', unsa
 if not budgets:
     st.info("No hay presupuestos registrados. Crea el primero con el formulario de arriba.")
 else:
-    budgets_show = budgets
+    _bud_filter = st.text_input(
+        "Buscar proyecto",
+        placeholder="Filtrar por nombre de proyecto...",
+        key="bud_name_filter",
+        label_visibility="collapsed",
+    )
+    if _bud_filter:
+        _q = _bud_filter.lower()
+        budgets_show = [b for b in budgets if _q in (b.name or "").lower()]
+        if not budgets_show:
+            st.info(f"No hay proyectos que coincidan con «{_bud_filter}».")
+    else:
+        budgets_show = budgets
 
     for bud in budgets_show:
         is_editing = st.session_state.get(f"editing_bud_{bud.id}", False)
 
         _is_finished = getattr(bud, "is_finished", False)
+        _deact_date  = getattr(bud, "deactivated_at", None)
+        _react_date  = getattr(bud, "reactivation_date", None)
+        _reactivation_due = (
+            (not bud.is_active) and (not _is_finished)
+            and _react_date is not None and _react_date <= datetime.utcnow()
+        )
         if _is_finished:
             _fin_date   = bud.finished_at.strftime("%d/%m/%Y") if bud.finished_at else "—"
             card_class  = "bud-card inactive"
@@ -529,7 +555,10 @@ else:
         else:
             card_class  = "bud-card inactive"
             icon_class  = "bud-icon inactive"
-            status_html = '<span class="stat-badge stat-inactive">&#9675; Inactivo</span>'
+            if _reactivation_due:
+                status_html = '<span class="stat-badge stat-inactive" style="background:rgba(245,158,11,.16);color:#fbbf24;border-color:rgba(245,158,11,.32)">&#9888; Reactivación pendiente</span>'
+            else:
+                status_html = '<span class="stat-badge stat-inactive">&#9675; Inactivo</span>'
 
         # ── Fila principal ────────────────────────────────────────────────────
         col_card, col_toggle, col_edit, col_fin, col_del = st.columns([4.5, 1.8, 1.2, 1.7, 1.3], gap="small")
@@ -537,16 +566,54 @@ else:
         with col_card:
             fecha    = bud.created_at.strftime("%d/%m/%Y")
             nota_txt = f"&nbsp;·&nbsp; {bud.notes}" if bud.notes else ""
+            _deact_info = ""
+            # El TOTAL del presupuesto es fijo y solo cambia con Editar.
+            # El "Disponible" se computa = total − bloqueado − pendiente − perdido − flotante.
+            _locked_s, _locked_d = get_locked_consumed(db, bud.id)
+            _pend_s,   _pend_d   = get_pending_deleted_consumed(db, bud.id)
+            _lost_s,   _lost_d   = get_lost_consumed(db, bud.id)
+            _floating_s = 0.0
+            _floating_d = 0.0
+            if (not bud.is_active) and (not _is_finished):
+                _floating_s, _floating_d = get_floating_consumed(db, bud.id)
+            _avail_soles   = max(0.0, float(bud.budget_soles)   - _locked_s - _pend_s - _lost_s - _floating_s)
+            _avail_dolares = max(0.0, float(bud.budget_dolares) - _locked_d - _pend_d - _lost_d - _floating_d)
+            _floating_note = ""
+            if _floating_s > 0 or _floating_d > 0:
+                _floating_note = (
+                    f'<div style="font-size:.62rem;color:#fbbf24;margin-top:2px">'
+                    f'⏳ Flotante: S/ {_floating_s:,.2f}'
+                    f'</div>'
+                )
+            if (not bud.is_active) and (not _is_finished) and _deact_date:
+                _d_str = _deact_date.strftime("%d/%m/%Y")
+                _r_str = _react_date.strftime("%d/%m/%Y") if _react_date else "—"
+                _reason_txt = bud.deactivation_reason or "—"
+                _r_color = "#fbbf24" if _reactivation_due else "#94a3b8"
+                _deact_info = (
+                    f'<div class="bud-meta" style="margin-top:.25rem;color:rgba(148,163,184,.78)">'
+                    f'<span style="color:#94a3b8">Desactivado: {_d_str}</span>'
+                    f' &nbsp;·&nbsp; <span style="color:{_r_color}">Reactivación: {_r_str}</span>'
+                    f' &nbsp;·&nbsp; <em>{_reason_txt}</em>'
+                    f'</div>'
+                )
             st.markdown(f"""
             <div class="{card_class}">
               <div class="{icon_class}">&#128188;</div>
               <div class="bud-info">
                 <div class="bud-name">{bud.name} {status_html}</div>
                 <div class="bud-meta">Creado: {fecha}{nota_txt}</div>
+                {_deact_info}
               </div>
               <div class="bud-amounts">
+                <div style="font-size:.60rem;color:rgba(148,163,184,.55);font-weight:700;text-transform:uppercase;letter-spacing:.07em;margin-bottom:1px">Presupuesto (fijo)</div>
                 <div class="bud-soles">S/ {bud.budget_soles:,.2f}</div>
                 <div class="bud-dolares">$ {bud.budget_dolares:,.2f}</div>
+                <div style="font-size:.62rem;color:rgba(148,163,184,.55);margin-top:.30rem">
+                  Disponible: <span style="color:#34d399;font-weight:700">S/ {_avail_soles:,.2f}</span>
+                  &nbsp;·&nbsp; <span style="color:#34d399;font-weight:700">$ {_avail_dolares:,.2f}</span>
+                </div>
+                {_floating_note}
               </div>
             </div>""", unsafe_allow_html=True)
 
@@ -558,11 +625,11 @@ else:
                     st.rerun()
             elif bud.is_active:
                 if st.button("Desactivar", key=f"toggle_{bud.id}", use_container_width=True):
-                    update_budget(db, bud.id, is_active=False)
+                    st.session_state[f"deact_form_{bud.id}"] = True
                     st.rerun()
             else:
                 if st.button("Activar", key=f"toggle_{bud.id}", use_container_width=True, type="primary"):
-                    update_budget(db, bud.id, is_active=True)
+                    st.session_state[f"act_form_{bud.id}"] = True
                     st.rerun()
 
         with col_edit:
@@ -630,6 +697,177 @@ else:
                     st.rerun()
             st.markdown("---")
 
+        # ── Formulario de desactivación ──────────────────────────────────────
+        if st.session_state.get(f"deact_form_{bud.id}") and bud.is_active and not _is_finished:
+            st.markdown("---")
+            st.markdown(f"**🔻 Desactivar proyecto: {bud.name}**")
+            with st.form(key=f"form_deact_{bud.id}"):
+                _reason = st.text_area(
+                    "Motivo de la desactivación *",
+                    placeholder="Explica por qué se desactiva el proyecto…",
+                    height=80,
+                )
+                _react = st.date_input(
+                    "Fecha programada de reactivación *",
+                    value=date.today() + timedelta(days=30),
+                    min_value=date.today(),
+                    help="Cuando llegue esta fecha, deberás confirmar la reactivación o extender la fecha con un nuevo motivo.",
+                )
+                _ds, _dc = st.columns(2)
+                with _ds:
+                    _confirm_deact = st.form_submit_button("Confirmar desactivación", use_container_width=True, type="primary")
+                with _dc:
+                    _cancel_deact  = st.form_submit_button("Cancelar", use_container_width=True)
+                if _confirm_deact:
+                    if not _reason.strip():
+                        st.error("El motivo de desactivación es obligatorio.")
+                    else:
+                        _react_dt = datetime.combine(_react, datetime.min.time())
+                        deactivate_budget_with_reason(db, bud.id, _reason.strip(), _react_dt)
+                        st.session_state.pop(f"deact_form_{bud.id}", None)
+                        st.success(f"Proyecto **{bud.name}** desactivado. Reactivación programada para {_react.strftime('%d/%m/%Y')}.")
+                        st.rerun()
+                if _cancel_deact:
+                    st.session_state.pop(f"deact_form_{bud.id}", None)
+                    st.rerun()
+            st.markdown("---")
+
+        # ── Formulario de activación manual ──────────────────────────────────
+        if st.session_state.get(f"act_form_{bud.id}") and (not bud.is_active) and (not _is_finished):
+            st.markdown("---")
+            st.markdown(f"**🔓 Activar proyecto: {bud.name}**")
+            _curr_react = _react_date.strftime("%d/%m/%Y") if _react_date else "—"
+            st.caption(
+                f"Motivo de desactivación: *{bud.deactivation_reason or '—'}*  \n"
+                f"Reactivación programada: {_curr_react}"
+            )
+            with st.form(key=f"form_act_{bud.id}"):
+                _act_note = st.text_area(
+                    "Motivo de la reactivación *",
+                    placeholder="Explica por qué se reactiva el proyecto…",
+                    height=80,
+                )
+                _as, _ac = st.columns(2)
+                with _as:
+                    _confirm_act = st.form_submit_button("Confirmar activación", use_container_width=True, type="primary")
+                with _ac:
+                    _cancel_act  = st.form_submit_button("Cancelar", use_container_width=True)
+                if _confirm_act:
+                    if not _act_note.strip():
+                        st.error("El motivo de reactivación es obligatorio.")
+                    else:
+                        confirm_reactivation(db, bud.id, note=_act_note.strip())
+                        st.session_state.pop(f"act_form_{bud.id}", None)
+                        st.success(f"Proyecto **{bud.name}** reactivado.")
+                        st.rerun()
+                if _cancel_act:
+                    st.session_state.pop(f"act_form_{bud.id}", None)
+                    st.rerun()
+            st.markdown("---")
+
+        # ── Confirmación / Extensión de reactivación ─────────────────────────
+        if (not bud.is_active) and (not _is_finished) and _react_date is not None:
+            _ext_history = get_extension_history(bud)
+            with st.expander(
+                f"🔔 Estado de reactivación — {bud.name}"
+                + (" · ⚠️ pendiente" if _reactivation_due else ""),
+                expanded=_reactivation_due,
+            ):
+                _d_str_full = _deact_date.strftime("%d/%m/%Y %H:%M") if _deact_date else "—"
+                _r_str_full = _react_date.strftime("%d/%m/%Y")
+                st.markdown(
+                    f"**Desactivado:** {_d_str_full}  \n"
+                    f"**Motivo original:** {bud.deactivation_reason or '—'}  \n"
+                    f"**Reactivación programada:** {_r_str_full}"
+                )
+
+                if _ext_history:
+                    st.markdown("**Historial de cambios:**")
+                    for _idx, _h in enumerate(_ext_history, 1):
+                        _type = _h.get("type") or "extension"
+                        try:
+                            _prev_dt = datetime.fromisoformat(_h["previous_date"]).strftime("%d/%m/%Y") if _h.get("previous_date") else "—"
+                            _new_dt  = datetime.fromisoformat(_h["new_date"]).strftime("%d/%m/%Y") if _h.get("new_date") else None
+                            _at_raw  = _h.get("reactivated_at") or _h.get("extended_at")
+                            _at_str  = datetime.fromisoformat(_at_raw).strftime("%d/%m/%Y %H:%M") if _at_raw else "—"
+                        except (ValueError, TypeError):
+                            _prev_dt = _h.get("previous_date") or "—"
+                            _new_dt  = _h.get("new_date")
+                            _at_str  = _h.get("reactivated_at") or _h.get("extended_at") or "—"
+                        if _type == "manual_reactivation":
+                            _label = f"🔓 Reactivación manual (fecha programada era {_prev_dt})"
+                        else:
+                            _label = f"📅 Extensión: {_prev_dt} → {_new_dt or '—'}"
+                        st.markdown(
+                            f"&nbsp;&nbsp;**{_idx}.** {_label}"
+                            f" &nbsp;·&nbsp; *{_h.get('reason') or '—'}*"
+                            f" &nbsp;·&nbsp; <span style='color:rgba(148,163,184,.55);font-size:.74rem'>registrado: {_at_str}</span>",
+                            unsafe_allow_html=True,
+                        )
+
+                if _reactivation_due:
+                    st.warning(
+                        f"La fecha de reactivación ({_r_str_full}) ya llegó. "
+                        f"Confirma la reactivación o extiende la fecha con un nuevo motivo."
+                    )
+                    _ec1, _ec2 = st.columns(2)
+                    if _ec1.button(
+                        "✓ Confirmar reactivación",
+                        key=f"confirm_react_{bud.id}",
+                        use_container_width=True, type="primary",
+                    ):
+                        confirm_reactivation(db, bud.id)
+                        st.success(f"Proyecto **{bud.name}** reactivado.")
+                        st.rerun()
+                    if _ec2.button(
+                        "📅 Extender fecha",
+                        key=f"open_extend_{bud.id}",
+                        use_container_width=True,
+                    ):
+                        st.session_state[f"extend_form_{bud.id}"] = True
+                        st.rerun()
+
+                    if st.session_state.get(f"extend_form_{bud.id}"):
+                        with st.form(key=f"form_extend_{bud.id}"):
+                            _new_date = st.date_input(
+                                "Nueva fecha de reactivación *",
+                                value=date.today() + timedelta(days=15),
+                                min_value=date.today(),
+                                key=f"ext_date_{bud.id}",
+                            )
+                            _ext_reason = st.text_area(
+                                "Motivo de la extensión *",
+                                placeholder="Explica por qué se extiende la fecha…",
+                                height=70,
+                                key=f"ext_reason_{bud.id}",
+                            )
+                            _xs, _xc = st.columns(2)
+                            with _xs:
+                                _save_ext = st.form_submit_button(
+                                    "Guardar extensión", use_container_width=True, type="primary"
+                                )
+                            with _xc:
+                                _cancel_ext = st.form_submit_button(
+                                    "Cancelar", use_container_width=True
+                                )
+                            if _save_ext:
+                                if not _ext_reason.strip():
+                                    st.error("Debes indicar un motivo para extender la fecha.")
+                                else:
+                                    extend_reactivation(
+                                        db, bud.id,
+                                        datetime.combine(_new_date, datetime.min.time()),
+                                        _ext_reason.strip(),
+                                    )
+                                    st.session_state.pop(f"extend_form_{bud.id}", None)
+                                    st.success(
+                                        f"Fecha de reactivación extendida hasta {_new_date.strftime('%d/%m/%Y')}."
+                                    )
+                                    st.rerun()
+                            if _cancel_ext:
+                                st.session_state.pop(f"extend_form_{bud.id}", None)
+                                st.rerun()
+
         # ── Confirmar eliminación ─────────────────────────────────────────────
         if st.session_state.get(f"confirm_del_{bud.id}"):
             _frozen_count = count_budget_inventory(db, bud.id)
@@ -670,6 +908,7 @@ else:
 
         # ── Formulario de edición ─────────────────────────────────────────────
         if is_editing:
+            _editing_inactive = (not bud.is_active) and (not _is_finished)
             st.markdown('<div class="edit-form-box">', unsafe_allow_html=True)
             with st.form(key=f"form_edit_{bud.id}"):
                 ec1, ec2, ec3 = st.columns([3, 2, 2], gap="medium")
@@ -686,7 +925,36 @@ else:
                         value=float(bud.budget_dolares), step=100.0, format="%.2f",
                     )
                 enotes  = st.text_area("Notas", value=bud.notes or "", height=60)
-                ea      = st.checkbox("Proyecto activo", value=bool(bud.is_active))
+
+                # Cuando el proyecto está desactivado (no finalizado), permitir
+                # editar la fecha y el motivo de reactivación desde aquí.
+                _new_react_date_val   = None
+                _new_react_reason_val = None
+                if _editing_inactive:
+                    st.markdown(
+                        "<div style='font-size:.78rem;font-weight:700;color:#94a3b8;"
+                        "margin:.4rem 0 .35rem'>Datos de desactivación</div>",
+                        unsafe_allow_html=True,
+                    )
+                    erd1, erd2 = st.columns([1.4, 2], gap="medium")
+                    with erd1:
+                        _curr_react_date = (
+                            _react_date.date() if _react_date else (date.today() + timedelta(days=30))
+                        )
+                        _new_react_date_val = st.date_input(
+                            "Fecha de reactivación",
+                            value=_curr_react_date,
+                            key=f"edit_react_date_{bud.id}",
+                            help="Modifica la fecha programada de reactivación.",
+                        )
+                    with erd2:
+                        _new_react_reason_val = st.text_area(
+                            "Motivo de la desactivación",
+                            value=bud.deactivation_reason or "",
+                            height=80,
+                            key=f"edit_react_reason_{bud.id}",
+                        )
+
                 esave, ecancel = st.columns(2)
                 with esave:
                     save_clicked = st.form_submit_button("Guardar cambios", use_container_width=True, type="primary")
@@ -698,13 +966,18 @@ else:
                         st.error("El nombre no puede estar vacío.")
                     elif es < 0 or ed < 0:
                         st.error("Los montos no pueden ser negativos.")
+                    elif _editing_inactive and not (_new_react_reason_val or "").strip():
+                        st.error("El motivo de desactivación no puede estar vacío.")
                     else:
                         update_budget(
                             db, bud.id,
                             name=en.strip(), budget_soles=es,
                             budget_dolares=ed, notes=enotes.strip() or None,
-                            is_active=ea,
                         )
+                        if _editing_inactive:
+                            bud.reactivation_date   = datetime.combine(_new_react_date_val, datetime.min.time())
+                            bud.deactivation_reason = _new_react_reason_val.strip()
+                            db.commit()
                         st.session_state.pop(f"editing_bud_{bud.id}", None)
                         st.rerun()
                 if cancel_clicked:
@@ -728,6 +1001,128 @@ else:
               </span>
             </div>
             """, unsafe_allow_html=True)
+
+            # ── Panel de utilización del presupuesto (por ingresos a inventario) ──
+            # El total del presupuesto es fijo (sólo cambia con el botón Editar).
+            # Consumo = activo (bloqueado, verde) + pendiente (sin resolver, verde) +
+            #            perdido (definitivo, rojo) + flotante (proyecto desactivado, ámbar).
+            _hlock_s, _hlock_d = get_locked_consumed(db, bud.id)
+            _hpend_s, _hpend_d = get_pending_deleted_consumed(db, bud.id)
+            _hlost_s, _hlost_d = get_lost_consumed(db, bud.id)
+            _hflt_s,  _hflt_d  = get_floating_consumed(db, bud.id)
+            _orig_s_h = float(bud.budget_soles)
+            _orig_d_h = float(bud.budget_dolares)
+            _green_s  = _hlock_s + _hpend_s   # consumo en uso o pendiente de resolución
+            _green_d  = _hlock_d + _hpend_d
+            _cons_s_h = _green_s + _hlost_s + _hflt_s
+            _cons_d_h = _green_d + _hlost_d + _hflt_d
+            _pct_s_h  = min(100.0, (_cons_s_h / _orig_s_h * 100.0) if _orig_s_h > 0 else 0.0)
+            _pct_d_h  = min(100.0, (_cons_d_h / _orig_d_h * 100.0) if _orig_d_h > 0 else 0.0)
+            _rem_s_h  = max(0.0, _orig_s_h - _cons_s_h)
+            _rem_d_h  = max(0.0, _orig_d_h - _cons_d_h)
+
+            def _seg_pct(val, original):
+                return (val / original * 100.0) if original > 0 else 0.0
+
+            _proj_state_pill = (
+                '<span style="font-size:.62rem;font-weight:800;padding:.12rem .55rem;'
+                'border-radius:20px;background:rgba(5,150,105,.18);color:#6ee7b7;'
+                'border:1px solid rgba(5,150,105,.30);text-transform:uppercase;'
+                'letter-spacing:.05em">Activo</span>'
+                if bud.is_active else
+                '<span style="font-size:.62rem;font-weight:800;padding:.12rem .55rem;'
+                'border-radius:20px;background:rgba(148,163,184,.16);color:#94a3b8;'
+                'border:1px solid rgba(148,163,184,.30);text-transform:uppercase;'
+                'letter-spacing:.05em">Desactivado</span>'
+            )
+            _float_chip_h = (
+                f'<span style="font-size:.62rem;font-weight:700;padding:.10rem .50rem;'
+                f'border-radius:20px;background:rgba(245,158,11,.14);color:#fbbf24;'
+                f'border:1px solid rgba(245,158,11,.28);margin-left:.4rem">⏳ Flotante S/ {_hflt_s:,.2f}</span>'
+                if _hflt_s > 0 or _hflt_d > 0 else ""
+            )
+            _lost_chip_h = (
+                f'<span style="font-size:.62rem;font-weight:700;padding:.10rem .50rem;'
+                f'border-radius:20px;background:rgba(239,68,68,.14);color:#fca5a5;'
+                f'border:1px solid rgba(239,68,68,.32);margin-left:.4rem">❌ Perdido S/ {_hlost_s:,.2f}</span>'
+                if _hlost_s > 0 or _hlost_d > 0 else ""
+            )
+
+            def _util_bar_segmented(label, original, green_val, lost_val, float_val, remaining, currency):
+                p_green = _seg_pct(green_val, original)
+                p_lost  = _seg_pct(lost_val,  original)
+                p_float = _seg_pct(float_val, original)
+                p_total = min(100.0, p_green + p_lost + p_float)
+                # Color del % total: si >90% rojo; 70-90% ámbar; sino verde — pero si hay perdido lo destacamos.
+                if p_lost > 0:
+                    total_color = "#f87171"
+                elif p_total >= 90:
+                    total_color = "#ef4444"
+                elif p_total >= 70:
+                    total_color = "#f59e0b"
+                else:
+                    total_color = "#22c55e"
+                segments = (
+                    f'<div style="height:100%;width:{p_green}%;background:#22c55e"></div>'
+                    f'<div style="height:100%;width:{p_lost}%;background:#ef4444"></div>'
+                    f'<div style="height:100%;width:{p_float}%;background:#f59e0b"></div>'
+                )
+                consumed_total = green_val + lost_val + float_val
+                return (
+                    f'<div style="margin-top:.5rem">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'font-size:.74rem;margin-bottom:.25rem;font-weight:600">'
+                    f'<span style="color:rgba(148,163,184,.75)">{label}</span>'
+                    f'<span style="color:{total_color}">{p_total:.1f}% &nbsp;·&nbsp; '
+                    f'{currency} {consumed_total:,.2f} / {currency} {original:,.2f}  '
+                    f'<span style="color:rgba(148,163,184,.55);font-weight:500">'
+                    f'(disponible {currency} {remaining:,.2f})</span></span></div>'
+                    f'<div style="background:rgba(255,255,255,.08);border-radius:100px;'
+                    f'height:7px;overflow:hidden;display:flex">'
+                    f'{segments}'
+                    f'</div>'
+                    f'<div style="display:flex;gap:.8rem;font-size:.65rem;color:rgba(148,163,184,.55);'
+                    f'margin-top:.30rem">'
+                    + (f'<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;margin-right:.30rem"></span>'
+                       f'En uso {currency} {green_val:,.2f}</span>' if green_val > 0 else "")
+                    + (f'<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#ef4444;margin-right:.30rem"></span>'
+                       f'Perdido {currency} {lost_val:,.2f}</span>' if lost_val > 0 else "")
+                    + (f'<span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#f59e0b;margin-right:.30rem"></span>'
+                       f'Flotante {currency} {float_val:,.2f}</span>' if float_val > 0 else "")
+                    + f'</div></div>'
+                )
+
+            st.markdown(
+                f'<div style="border:1px solid rgba(37,99,235,.25);border-radius:14px;'
+                f'background:linear-gradient(135deg,rgba(37,99,235,.07),rgba(79,70,229,.03));'
+                f'padding:.85rem 1.1rem;margin:.4rem 0 .6rem">'
+                f'<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap;'
+                f'margin-bottom:.15rem">'
+                f'<span style="font-size:1rem">📊</span>'
+                f'<span style="font-weight:800;color:#e2e8f0">Utilización del presupuesto '
+                f'<span style="color:rgba(148,163,184,.55);font-weight:500;font-size:.78rem">'
+                f'(actualizado por ingresos a inventario)</span></span>'
+                f'{_proj_state_pill}{_lost_chip_h}{_float_chip_h}'
+                f'</div>'
+                + (_util_bar_segmented("Soles (S/.)", _orig_s_h, _green_s, _hlost_s, _hflt_s, _rem_s_h, "S/") if _orig_s_h > 0 else "")
+                + (_util_bar_segmented("Dólares ($)", _orig_d_h, _green_d, _hlost_d, _hflt_d, _rem_d_h, "$")  if _orig_d_h > 0 else "")
+                + f'<div style="display:flex;gap:1rem;font-size:.71rem;color:rgba(148,163,184,.65);'
+                  f'margin-top:.55rem;flex-wrap:wrap">'
+                  f'<span>🔒 Bloqueado: <strong style="color:#93c5fd">S/ {_hlock_s:,.2f}</strong> · '
+                  f'<strong style="color:#93c5fd">$ {_hlock_d:,.2f}</strong></span>'
+                  + (f'<span>⏸ Pendiente: <strong style="color:#fbbf24">S/ {_hpend_s:,.2f}</strong> · '
+                     f'<strong style="color:#fbbf24">$ {_hpend_d:,.2f}</strong></span>'
+                     if _hpend_s > 0 or _hpend_d > 0 else "")
+                  + (f'<span>❌ Perdido: <strong style="color:#f87171">S/ {_hlost_s:,.2f}</strong> · '
+                     f'<strong style="color:#f87171">$ {_hlost_d:,.2f}</strong></span>'
+                     if _hlost_s > 0 or _hlost_d > 0 else "")
+                  + (f'<span>⏳ Flotante: <strong style="color:#fbbf24">S/ {_hflt_s:,.2f}</strong> · '
+                     f'<strong style="color:#fbbf24">$ {_hflt_d:,.2f}</strong></span>'
+                     if _hflt_s > 0 or _hflt_d > 0 else "")
+                  + f'</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             cost_color = (
                 "#34d399" if bud.budget_soles == 0 or total_cost <= bud.budget_soles * 0.70
@@ -760,47 +1155,6 @@ else:
             """, unsafe_allow_html=True)
 
             _tc_hist = st.session_state.get("_bud_tc", 3.75)
-
-            if bud.budget_soles > 0:
-                pct       = min(total_cost / bud.budget_soles * 100, 100)
-                remaining = max(bud.budget_soles - total_cost, 0)
-                bar_color = "#22c55e" if pct < 70 else ("#f59e0b" if pct < 90 else "#ef4444")
-                st.markdown(f"""
-                <div class="prog-wrap">
-                  <div class="prog-label">
-                    <span>Utilización del presupuesto S/.</span>
-                    <span style="color:{bar_color};font-weight:700;">
-                      {pct:.1f}% &nbsp;·&nbsp; Disponible: S/ {remaining:,.2f}
-                    </span>
-                  </div>
-                  <div class="prog-track">
-                    <div class="prog-fill" style="width:{pct}%;background:{bar_color};"></div>
-                  </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            if bud.budget_dolares > 0:
-                # Gasto en dólares: usar precios en $ si están, sino convertir desde S/.
-                _cost_dol_hist = total_cost_dol if total_cost_dol > 0 else (
-                    total_cost / _tc_hist if _tc_hist > 0 else 0
-                )
-                _conv_note = "" if total_cost_dol > 0 else f" (convertido al T/C S/ {_tc_hist:.2f}/$)"
-                pct_d      = min(_cost_dol_hist / bud.budget_dolares * 100, 100)
-                rem_d      = max(bud.budget_dolares - _cost_dol_hist, 0)
-                bar_col_d  = "#22c55e" if pct_d < 70 else ("#f59e0b" if pct_d < 90 else "#ef4444")
-                st.markdown(f"""
-                <div class="prog-wrap">
-                  <div class="prog-label">
-                    <span>Utilización del presupuesto ${_conv_note}</span>
-                    <span style="color:{bar_col_d};font-weight:700;">
-                      {pct_d:.1f}% &nbsp;·&nbsp; Disponible: $ {rem_d:,.2f}
-                    </span>
-                  </div>
-                  <div class="prog-track">
-                    <div class="prog-fill" style="width:{pct_d}%;background:{bar_col_d};"></div>
-                  </div>
-                </div>
-                """, unsafe_allow_html=True)
 
             if not costs:
                 st.info("Sin despachos registrados desde la creación de este proyecto.")

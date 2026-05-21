@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
 from database import Base
 from datetime import datetime
 
@@ -15,3 +15,8 @@ class Budget(Base):
     is_finished    = Column(Boolean, nullable=False, default=False)
     finished_at    = Column(DateTime, nullable=True)
     created_at     = Column(DateTime, default=datetime.utcnow)
+
+    deactivated_at        = Column(DateTime, nullable=True)
+    deactivation_reason   = Column(String, nullable=True)
+    reactivation_date     = Column(DateTime, nullable=True)
+    extension_history     = Column(Text, nullable=True)

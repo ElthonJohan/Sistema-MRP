@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from models.budget import Budget
 from datetime import datetime
+import json
 
 
 def create_budget(db: Session, name: str, budget_soles: float, budget_dolares: float, notes: str = None) -> Budget:
@@ -69,6 +70,7 @@ def update_budget(db: Session, budget_id: int, name: str = None,
     b = db.query(Budget).filter(Budget.id == budget_id).first()
     if not b:
         return False
+    was_active = bool(b.is_active)
     if name is not None:
         b.name = name
     if budget_soles is not None:
@@ -80,6 +82,11 @@ def update_budget(db: Session, budget_id: int, name: str = None,
     if is_active is not None:
         b.is_active = is_active
     db.commit()
+    # If we just turned an inactive project active, lock any floating stock
+    # at the current material prices.
+    if is_active is True and not was_active:
+        from services.inventory_service import lock_unlocked_inventory
+        lock_unlocked_inventory(db, budget_id)
     return True
 
 
@@ -100,31 +107,108 @@ def reactivate_budget(db: Session, budget_id: int) -> bool:
     b = db.query(Budget).filter(Budget.id == budget_id).first()
     if not b:
         return False
+    was_active = bool(b.is_active)
     b.is_finished = False
     b.is_active   = True
     b.finished_at = None
+    db.commit()
+    if not was_active:
+        from services.inventory_service import lock_unlocked_inventory
+        lock_unlocked_inventory(db, budget_id)
+    return True
+
+
+def deactivate_budget_with_reason(db: Session, budget_id: int,
+                                  reason: str, reactivation_date: datetime) -> bool:
+    """Desactiva un proyecto registrando el motivo, la fecha de desactivación
+    y la fecha programada de reactivación."""
+    b = db.query(Budget).filter(Budget.id == budget_id).first()
+    if not b:
+        return False
+    b.is_active           = False
+    b.deactivated_at      = datetime.utcnow()
+    b.deactivation_reason = (reason or "").strip() or None
+    b.reactivation_date   = reactivation_date
+    db.commit()
+    return True
+
+
+def confirm_reactivation(db: Session, budget_id: int, note: str = None) -> bool:
+    """Confirma la reactivación del proyecto. Si se entrega una nota, queda
+    registrada en el historial como entrada de reactivación manual.
+    Limpia los campos de desactivación pero conserva el historial completo.
+
+    Al reactivar, todo el stock con costo flotante (`unlocked_qty > 0`) que
+    pertenece al proyecto se bloquea al precio actual y se descuenta del
+    presupuesto."""
+    b = db.query(Budget).filter(Budget.id == budget_id).first()
+    if not b:
+        return False
+    was_active = bool(b.is_active)
+    if note and note.strip():
+        history = get_extension_history(b)
+        history.append({
+            "type":           "manual_reactivation",
+            "previous_date":  b.reactivation_date.isoformat() if b.reactivation_date else None,
+            "reason":         note.strip(),
+            "reactivated_at": datetime.utcnow().isoformat(),
+        })
+        b.extension_history = json.dumps(history)
+    b.is_active           = True
+    b.deactivated_at      = None
+    b.deactivation_reason = None
+    b.reactivation_date   = None
+    db.commit()
+    if not was_active:
+        from services.inventory_service import lock_unlocked_inventory
+        lock_unlocked_inventory(db, budget_id)
+    return True
+
+
+def get_extension_history(b: Budget) -> list:
+    """Devuelve la lista de extensiones registradas (puede estar vacía)."""
+    raw = getattr(b, "extension_history", None)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        if isinstance(data, list):
+            return data
+    except (ValueError, TypeError):
+        pass
+    return []
+
+
+def extend_reactivation(db: Session, budget_id: int,
+                        new_date: datetime, reason: str) -> bool:
+    """Extiende la fecha de reactivación de un proyecto desactivado y
+    registra el motivo en el historial de extensiones."""
+    b = db.query(Budget).filter(Budget.id == budget_id).first()
+    if not b or b.is_active:
+        return False
+    history = get_extension_history(b)
+    history.append({
+        "previous_date": b.reactivation_date.isoformat() if b.reactivation_date else None,
+        "new_date":      new_date.isoformat(),
+        "reason":        (reason or "").strip(),
+        "extended_at":   datetime.utcnow().isoformat(),
+    })
+    b.reactivation_date  = new_date
+    b.extension_history  = json.dumps(history)
     db.commit()
     return True
 
 
 def deduct_budget(db: Session, budget_id: int, soles: float, dolares: float) -> bool:
-    b = db.query(Budget).filter(Budget.id == budget_id).first()
-    if not b:
-        return False
-    b.budget_soles   = max(0.0, b.budget_soles   - soles)
-    b.budget_dolares = max(0.0, b.budget_dolares - dolares)
-    db.commit()
-    return True
+    """OBSOLETO — el presupuesto es fijo y solo cambia por `update_budget`
+    (botón Editar). Mantiene la firma como no-op para compatibilidad."""
+    return False
 
 
 def credit_budget(db: Session, budget_id: int, soles: float, dolares: float) -> bool:
-    b = db.query(Budget).filter(Budget.id == budget_id).first()
-    if not b:
-        return False
-    b.budget_soles   += soles
-    b.budget_dolares += dolares
-    db.commit()
-    return True
+    """OBSOLETO — el presupuesto es fijo y solo cambia por `update_budget`
+    (botón Editar). Mantiene la firma como no-op para compatibilidad."""
+    return False
 
 
 def get_dispatch_costs(db: Session, since: datetime = None, until: datetime = None):
