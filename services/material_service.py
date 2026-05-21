@@ -99,6 +99,7 @@ def delete_material_code(db: Session, code, user_id=None):
                 movement_type="OUT",
                 reference_type="material_eliminado",
                 reference_id=None,
+                budget_id=inv.budget_id,
                 user_id=user_id,
                 timestamp=datetime.utcnow(),
             ))

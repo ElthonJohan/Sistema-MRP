@@ -1246,8 +1246,13 @@ if _is_proj_scope:
 desde  = datetime.combine(d_from, datetime.min.time())
 hasta  = datetime.combine(d_to + timedelta(days=1), datetime.min.time())
 
-g_costs, g_total, g_total_dol = get_dispatch_costs(db, since=desde, until=hasta)
-g_summary        = get_movement_summary(db, since=desde, until=hasta)
+_scope_budget_id = _sel_bud.id if _is_proj_scope else None
+g_costs, g_total, g_total_dol = get_dispatch_costs(
+    db, since=desde, until=hasta, budget_id=_scope_budget_id,
+)
+g_summary        = get_movement_summary(
+    db, since=desde, until=hasta, budget_id=_scope_budget_id,
+)
 
 days_range = (d_to - d_from).days + 1
 _scope_label = f"Proyecto: {_scope_sel}" if _is_proj_scope else "Rango personalizado"

@@ -122,6 +122,7 @@ def add_stock(db: Session, warehouse_id, material_id, qty, user_id,
         movement_type="IN",
         reference_type="manual",
         reference_id=None,
+        budget_id=budget_id,
         user_id=user_id
     )
 
@@ -263,6 +264,17 @@ def remove_stock(db: Session, warehouse_id, material_id, qty, user_id,
         touched.append(inv)
         remaining -= reduce
 
+    # Vincular el movimiento al proyecto cuando hay un único contexto claro:
+    # - budget_id explícito (no "__any__") → ese proyecto.
+    # - "__any__" con un solo registro tocado y con budget_id → ese proyecto.
+    _mov_budget_id = None
+    if budget_id not in ("__any__", None):
+        _mov_budget_id = budget_id
+    elif budget_id == "__any__":
+        _touched_buds = {inv.budget_id for inv in touched if inv.budget_id is not None}
+        if len(_touched_buds) == 1:
+            _mov_budget_id = next(iter(_touched_buds))
+
     movement = Movement(
         warehouse_id=warehouse_id,
         material_id=material_id,
@@ -270,6 +282,7 @@ def remove_stock(db: Session, warehouse_id, material_id, qty, user_id,
         movement_type="OUT",
         reference_type="manual",
         reference_id=None,
+        budget_id=_mov_budget_id,
         user_id=user_id
     )
 

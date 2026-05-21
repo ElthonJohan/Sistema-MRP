@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
@@ -16,3 +16,8 @@ class BudgetAdditional(Base):
     concept      = Column(String, nullable=False)
     notes        = Column(Text, nullable=True)
     created_at   = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    confirmed         = Column(Boolean, nullable=False, default=False)
+    confirmation_code = Column(String, nullable=True, index=True)
+    confirmed_at      = Column(DateTime, nullable=True)
+    documents         = Column(Text, nullable=True)

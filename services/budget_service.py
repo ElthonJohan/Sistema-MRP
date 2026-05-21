@@ -211,15 +211,18 @@ def credit_budget(db: Session, budget_id: int, soles: float, dolares: float) -> 
     return False
 
 
-def get_dispatch_costs(db: Session, since: datetime = None, until: datetime = None):
+def get_dispatch_costs(db: Session, since: datetime = None, until: datetime = None,
+                       budget_id: int = None):
     """
     Returns (list_of_dicts, grand_total_soles, grand_total_dolares).
     Each dict: material name/code/unit, total_qty dispatched, unit_price (S/.), unit_price_dolares,
     total_cost (S/.), total_cost_dolares.
     Filtered by Dispatch.dispatch_date when since/until are provided.
+    When `budget_id` is provided, only despachos cuyo `Requirement.budget_id` coincide se cuentan.
     """
     from models.dispatch import Dispatch, DispatchItem
     from models.material import Material
+    from models.requirement import Requirement
 
     q = (
         db.query(
@@ -232,6 +235,10 @@ def get_dispatch_costs(db: Session, since: datetime = None, until: datetime = No
         q = q.filter(Dispatch.dispatch_date >= since)
     if until:
         q = q.filter(Dispatch.dispatch_date <= until)
+    if budget_id is not None:
+        q = q.join(Requirement, Dispatch.requirement_id == Requirement.id).filter(
+            Requirement.budget_id == budget_id
+        )
 
     rows = q.group_by(DispatchItem.material_id).all()
 
@@ -286,8 +293,13 @@ def get_all_projects_cost_summary(db: Session) -> list:
     return result
 
 
-def get_movement_summary(db: Session, since: datetime = None, until: datetime = None) -> dict:
-    """Total units IN vs OUT in the movement log for the given period."""
+def get_movement_summary(db: Session, since: datetime = None, until: datetime = None,
+                         budget_id: int = None) -> dict:
+    """Total units IN vs OUT in the movement log for the given period.
+
+    Cuando se pasa `budget_id`, las KPIs se acotan a movimientos vinculados
+    explícitamente a ese proyecto (`Movement.budget_id`).
+    """
     from models.movement import Movement
 
     def _sum_abs(mtype: str) -> int:
@@ -298,6 +310,8 @@ def get_movement_summary(db: Session, since: datetime = None, until: datetime = 
             q = q.filter(Movement.timestamp >= since)
         if until:
             q = q.filter(Movement.timestamp <= until)
+        if budget_id is not None:
+            q = q.filter(Movement.budget_id == budget_id)
         return q.scalar() or 0
 
     return {
