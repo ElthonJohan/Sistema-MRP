@@ -69,6 +69,7 @@ def create_receipt(db: Session, dispatch_id, user_id=1):
             movement_type="IN",
             reference_type="receipt",
             reference_id=receipt.id,
+            budget_id=req_budget_id,
             user_id=user_id
         )
         db.add(movement)

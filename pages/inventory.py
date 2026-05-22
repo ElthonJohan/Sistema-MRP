@@ -6,8 +6,11 @@ from services.inventory_service import (
     get_deleted_inventory, resolve_deleted_inventory,
     get_frozen_inventory_for_owner, redirect_frozen_inventory, unfreeze_inventory,
     assign_project_to_inventory,
+    update_inventory_note,
+    restore_deleted_inventory,
+    get_budget_available,
 )
-from services.budget_service import get_budgets, deduct_budget, credit_budget
+from services.budget_service import get_budgets
 from models.warehouse import Warehouse
 from models.material import Material
 from utils.auth import require_cliente, get_current_user_id
@@ -188,6 +191,18 @@ button[kind="secondary"].del-btn:hover {
     border: 1px solid rgba(5,150,105,.30);
     white-space: nowrap;
 }
+.inv-proj-chip.inactive {
+    background: rgba(148,163,184,.14);
+    color: #94a3b8;
+    border-color: rgba(148,163,184,.30);
+}
+.inv-proj-chip .inv-proj-state {
+    font-size: .60rem; font-weight: 800;
+    margin-left: .35rem;
+    padding: 0 .35rem; border-radius: 10px;
+    background: rgba(255,255,255,.10);
+    text-transform: uppercase; letter-spacing: .04em;
+}
 .inv-noproj-chip {
     display: inline-flex; align-items: center;
     padding: .15rem .55rem; border-radius: 20px;
@@ -195,6 +210,28 @@ button[kind="secondary"].del-btn:hover {
     background: rgba(148,163,184,.10); color: rgba(148,163,184,.65);
     border: 1px dashed rgba(148,163,184,.30);
     white-space: nowrap;
+}
+.inv-note-row {
+    margin-top: .55rem;
+    padding: .42rem .65rem;
+    border-radius: 8px;
+    background: rgba(245,158,11,.06);
+    border: 1px solid rgba(245,158,11,.22);
+    display: flex; align-items: flex-start; gap: .45rem;
+    color: #fde68a; font-size: .76rem; line-height: 1.35;
+    white-space: pre-wrap;
+}
+.inv-note-row .inv-note-ic {
+    flex-shrink: 0; font-size: .85rem; line-height: 1;
+    margin-top: .08rem;
+}
+.inv-note-empty {
+    margin-top: .55rem; padding: .35rem .65rem;
+    border-radius: 8px;
+    border: 1px dashed rgba(148,163,184,.22);
+    background: rgba(148,163,184,.04);
+    color: rgba(148,163,184,.55);
+    font-size: .73rem; font-style: italic;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -208,6 +245,8 @@ owner_id = get_current_user_id()
 all_warehouses       = db.query(Warehouse).filter(Warehouse.owner_id == owner_id).all()
 principal_warehouses = [w for w in all_warehouses if w.type == "principal"]
 materials            = db.query(Material).all()
+_all_budgets         = get_budgets(db)
+_bud_status_by_name  = {b.name: bool(b.is_active) for b in _all_budgets}
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
 all_inventory    = get_inventory(db)
@@ -295,12 +334,16 @@ with _col_budgets.popover("Presupuestos", use_container_width=True):
         st.info("No hay presupuestos activos registrados.")
     else:
         for _b in _active_buds:
+            _av_s, _av_d = get_budget_available(db, _b.id)
             st.markdown(f"""
 <div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
             background:rgba(5,150,105,.07);margin-bottom:.45rem">
   <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
-  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
-    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  <div style="font-size:.72rem;color:rgba(255,255,255,.42);margin-top:.16rem">
+    Total: S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+  <div style="font-size:.78rem;color:#34d399;margin-top:.10rem;font-weight:700">
+    Disponible: S/ {_av_s:,.2f} &nbsp;·&nbsp; $ {_av_d:,.2f}
   </div>
 </div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
@@ -339,13 +382,20 @@ if st.session_state.get("inv_rem_msg"):
 if st.session_state.get("inv_bud_msg"):
     st.info(st.session_state.pop("inv_bud_msg"))
 
+# Limpiamos cualquier ID dejado por versiones anteriores (la utilización del
+# presupuesto ahora se muestra en el "Historial de costos" de cada proyecto en
+# la página de Presupuestos del superadmin).
+st.session_state.pop("inv_util_budget_id", None)
+
 # ── Ingresar stock ────────────────────────────────────────────────────────────
 st.markdown('<div class="sec-title">Ingresar Stock</div>', unsafe_allow_html=True)
 
-_active_buds    = [b for b in get_budgets(db) if b.is_active]
-_bud_opts_map   = {"No descontar del presupuesto": None}
-for _b in _active_buds:
-    _bud_opts_map[_b.name] = _b.id
+_selectable_buds = [b for b in get_budgets(db) if not getattr(b, "is_finished", False)]
+_selectable_buds.sort(key=lambda b: (not b.is_active, b.name.lower()))
+_bud_opts_map    = {"No descontar del presupuesto": None}
+for _b in _selectable_buds:
+    _label = _b.name if _b.is_active else f"{_b.name} (Desactivado)"
+    _bud_opts_map[_label] = _b.id
 
 _add_n = st.session_state.get("add_form_n", 0)
 with st.expander("Agregar stock a un almacén", expanded=False):
@@ -371,8 +421,9 @@ with st.expander("Agregar stock a un almacén", expanded=False):
 
     if st.button("Agregar Stock", type="primary", key=f"btn_add_stock_{_add_n}"):
         _bud_id_stock   = _bud_opts_map.get(in_bud_label)
-        _bud_name_stock = in_bud_label if _bud_id_stock is not None else None
-        newly_fulfilled = add_stock(
+        _bud_obj_stock  = next((_b for _b in _selectable_buds if _b.id == _bud_id_stock), None)
+        _bud_name_stock = _bud_obj_stock.name if _bud_obj_stock else None
+        newly_fulfilled, _applied_s, _applied_d = add_stock(
             db, warehouse_dict[in_wh], material_dict[in_mat], in_qty,
             user_id=owner_id,
             budget_id=_bud_id_stock,
@@ -388,15 +439,22 @@ with st.expander("Agregar stock a un almacén", expanded=False):
                     f"quedó completamente reservado y listo para despacho."
                 )
 
-        # Budget deduction
-        _bud_id = _bud_opts_map.get(in_bud_label)
-        if _bud_id is not None and _prev_mat:
-            _cost_s = in_qty * (_prev_mat.unit_price         or 0.0)
-            _cost_d = in_qty * (_prev_mat.unit_price_dolares or 0.0)
-            if _cost_s > 0 or _cost_d > 0:
-                deduct_budget(db, _bud_id, _cost_s, _cost_d)
+        # Budget feedback — the service already handled the budget deduction.
+        # For active projects: cost is locked and a fixed deduction was applied.
+        # For deactivated projects: cost is floating until the project reactivates.
+        if _bud_id_stock is not None and _bud_obj_stock is not None:
+            if _bud_obj_stock.is_active:
+                if _applied_s > 0 or _applied_d > 0:
+                    st.session_state["inv_bud_msg"] = (
+                        f"Se descontó **S/ {_applied_s:,.2f}** "
+                        f"(precio bloqueado) del presupuesto **{_bud_name_stock}**."
+                    )
+            else:
+                _prev_s = in_qty * (_prev_mat.unit_price         or 0.0) if _prev_mat else 0.0
                 st.session_state["inv_bud_msg"] = (
-                    f"Se descontó **S/ {_cost_s:,.2f}** del presupuesto **{in_bud_label}**."
+                    f"Proyecto **{_bud_name_stock}** está desactivado: el costo "
+                    f"queda flotante (≈ S/ {_prev_s:,.2f} al precio actual). "
+                    f"Se bloqueará al activar el proyecto."
                 )
 
         st.session_state["inv_add_msgs"] = msgs
@@ -410,19 +468,106 @@ st.markdown('<div class="sec-title">Retirar Stock</div>', unsafe_allow_html=True
 
 _rem_n = st.session_state.get("rem_form_n", 0)
 with st.expander("Retirar stock de un almacén", expanded=False):
-    col_wh2, col_mat2, col_qty2 = st.columns(3, gap="medium")
+    col_wh2, col_mat2 = st.columns(2, gap="medium")
     out_wh  = col_wh2.selectbox("Almacén",  list(warehouse_dict.keys()), key=f"out_wh_{_rem_n}")
     out_mat = col_mat2.selectbox("Material", list(material_dict.keys()),  key=f"out_mat_{_rem_n}")
-    out_qty = col_qty2.number_input("Cantidad", min_value=1, key=f"out_qty_{_rem_n}")
 
-    if st.button("Retirar Stock", type="primary", key=f"btn_rem_stock_{_rem_n}"):
-        success = remove_stock(db, warehouse_dict[out_wh], material_dict[out_mat], out_qty, user_id=owner_id)
-        if success:
-            st.session_state["inv_rem_msg"] = f"Se retiraron **{out_qty}** unidades de **{out_mat}** de **{out_wh}**."
-            st.session_state["rem_form_n"] = _rem_n + 1
-            st.rerun()
+    # Construye las opciones de proyecto en base a las líneas de inventario
+    # que existen para el almacén + material seleccionado, para no perder
+    # el rastro de stock al retirar.
+    _rem_wh_id  = warehouse_dict.get(out_wh)
+    _rem_mat_id = material_dict.get(out_mat)
+    _rem_inv_records = [
+        inv for inv in own_inventory
+        if inv.warehouse_id == _rem_wh_id and inv.material_id == _rem_mat_id
+    ]
+    _proj_total_stock = sum(int(inv.stock or 0) for inv in _rem_inv_records)
+
+    _rem_proj_opts = {}
+    if len(_rem_inv_records) > 1:
+        _rem_proj_opts[f"Cualquiera (global · {_proj_total_stock} u.)"] = "__any__"
+    for inv in _rem_inv_records:
+        _pn = inv.budget_name or "Sin proyecto"
+        _label = f"{_pn} · stock {int(inv.stock or 0)} u."
+        _rem_proj_opts[_label] = (inv.budget_id if inv.budget_id is not None else None)
+
+    col_proj, col_qty2 = st.columns(2, gap="medium")
+    if _rem_proj_opts:
+        out_proj_label = col_proj.selectbox(
+            "Proyecto",
+            list(_rem_proj_opts.keys()),
+            key=f"out_proj_{_rem_n}",
+            help="Selecciona de qué proyecto retirar el stock para no perder el rastro.",
+        )
+    else:
+        col_proj.info("No hay stock para el almacén/material seleccionado.")
+        out_proj_label = None
+
+    # Cantidad máxima permitida según el proyecto seleccionado.
+    if out_proj_label is None:
+        _max_qty = 0
+    else:
+        _scope_sel = _rem_proj_opts[out_proj_label]
+        if _scope_sel == "__any__":
+            _max_qty = _proj_total_stock
+        elif _scope_sel is None:
+            _max_qty = next(
+                (int(inv.stock or 0) for inv in _rem_inv_records if inv.budget_id is None),
+                0,
+            )
         else:
-            st.error("Stock insuficiente para realizar el retiro.")
+            _max_qty = next(
+                (int(inv.stock or 0) for inv in _rem_inv_records if inv.budget_id == _scope_sel),
+                0,
+            )
+
+    # Reset del input cuando cambian almacén / material / proyecto, para que el
+    # `value` no quede arrastrando un valor mayor que el nuevo `max_value`.
+    _qty_key = f"out_qty_{_rem_n}_{_rem_wh_id}_{_rem_mat_id}_{out_proj_label or 'none'}"
+    if _max_qty <= 0:
+        col_qty2.info("Sin stock para retirar.")
+        out_qty = 0
+    else:
+        out_qty = col_qty2.number_input(
+            "Cantidad",
+            min_value=1,
+            max_value=int(_max_qty),
+            value=min(int(st.session_state.get(_qty_key, 1) or 1), int(_max_qty)),
+            step=1,
+            key=_qty_key,
+            help=f"Máximo disponible para este proyecto: {_max_qty} unidades.",
+        )
+        st.caption(f"Stock disponible para retirar: **{_max_qty}** unidades.")
+
+    if st.button(
+        "Retirar Stock", type="primary", key=f"btn_rem_stock_{_rem_n}",
+        disabled=(_max_qty <= 0),
+    ):
+        if not _rem_proj_opts or _max_qty <= 0:
+            st.error("No hay stock disponible para retirar.")
+        elif int(out_qty) > int(_max_qty):
+            st.error(f"No puedes retirar más de {_max_qty} unidades.")
+        else:
+            _scope = _rem_proj_opts[out_proj_label]
+            success = remove_stock(
+                db, _rem_wh_id, _rem_mat_id, int(out_qty),
+                user_id=owner_id, budget_id=_scope,
+            )
+            if success:
+                _scope_lbl = (
+                    "el inventario global"
+                    if _scope == "__any__" else
+                    (f"el proyecto **{out_proj_label.split(' · ')[0]}**" if _scope is not None
+                     else "**Sin proyecto**")
+                )
+                st.session_state["inv_rem_msg"] = (
+                    f"Se retiraron **{out_qty}** unidades de **{out_mat}** "
+                    f"de **{out_wh}** en {_scope_lbl}."
+                )
+                st.session_state["rem_form_n"] = _rem_n + 1
+                st.rerun()
+            else:
+                st.error("Stock insuficiente para realizar el retiro en el proyecto seleccionado.")
 
 # ── Inventario Actual ─────────────────────────────────────────────────────────
 st.markdown('<div class="sec-title">Inventario Actual</div>', unsafe_allow_html=True)
@@ -541,25 +686,66 @@ else:
                     "Valor total", f"S/ {total_val:,.2f}", "#c4b5fd"
                 )
 
-        proj_badge = (
-            '<span class="inv-proj-chip">&#128196; ' + proj_name + '</span>'
-        ) if proj_name else (
-            '<span class="inv-noproj-chip">Sin proyecto</span>' if not is_obra else ""
-        )
+        if proj_name:
+            _proj_active = _bud_status_by_name.get(proj_name, True)
+            _state_lbl   = "activado" if _proj_active else "desactivado"
+            _chip_cls    = "" if _proj_active else " inactive"
+            proj_badge = (
+                f'<span class="inv-proj-chip{_chip_cls}">'
+                f'&#128196; {proj_name}'
+                f'<span class="inv-proj-state">({_state_lbl})</span>'
+                f'</span>'
+            )
+        else:
+            proj_badge = (
+                '<span class="inv-noproj-chip">Sin proyecto</span>'
+                if not is_obra else ""
+            )
         unit_span = (
             f'<span class="inv-unit">{mat_unit}</span>' if mat_unit else ""
         )
 
         confirming  = st.session_state.get("confirm_del_inv")    == inv.id
         assigning   = st.session_state.get("assign_proj_inv")    == inv.id
+        editing_note = st.session_state.get("edit_note_inv")     == inv.id
+
+        # Nota / costo bloqueado
+        _note_text = (inv.note or "").strip()
+        _locked_s  = float(getattr(inv, "locked_cost_soles", 0) or 0)
+        _unlocked  = int(getattr(inv, "unlocked_qty", 0) or 0)
+        if _note_text:
+            import html as _html
+            note_html = (
+                '<div class="inv-note-row">'
+                '<span class="inv-note-ic">📝</span>'
+                f'<span>{_html.escape(_note_text)}</span>'
+                '</div>'
+            )
+        else:
+            note_html = (
+                '<div class="inv-note-empty">📝 Sin nota — agrega una con el botón a la derecha.</div>'
+            )
+
+        # Indicador de costo flotante (proyecto desactivado)
+        cost_state_html = ""
+        if _unlocked > 0 and inv.material:
+            _float_s = _unlocked * float(inv.material.unit_price or 0.0)
+            cost_state_html = (
+                '<div class="inv-note-row" style="background:rgba(245,158,11,.10);'
+                'border-color:rgba(245,158,11,.32);color:#fbbf24;margin-top:.4rem">'
+                '<span class="inv-note-ic">⏳</span>'
+                f'<span>{_unlocked} unidad{"es" if _unlocked != 1 else ""} con costo flotante · '
+                f'≈ S/ {_float_s:,.2f} al precio actual (se bloqueará al activar el proyecto).</span>'
+                '</div>'
+            )
 
         if not confirming:
             # Botón "Asignar/Editar proyecto" solo aplica al inventario PRINCIPAL
             show_proj_btn = (not is_obra)
             if show_proj_btn:
-                col_card, col_assign, col_del = st.columns([8, 1.4, 0.9], gap="small")
+                col_card, col_assign, col_note, col_del = st.columns([7.4, 1.4, 1.3, 0.9], gap="small")
             else:
-                col_card, col_del = st.columns([9, 1], gap="small")
+                col_card, col_note, col_del = st.columns([8.4, 1.3, 0.9], gap="small")
                 col_assign = None
 
             with col_card:
@@ -573,6 +759,8 @@ else:
                         f'{proj_badge}'
                       '</div>'
                       f'<div class="inv-stats">{stats_html}</div>'
+                      f'{note_html}'
+                      f'{cost_state_html}'
                     '</div>'
                 )
                 st.markdown(card_html, unsafe_allow_html=True)
@@ -593,6 +781,21 @@ else:
                     ):
                         st.session_state["assign_proj_inv"] = inv.id
                         st.rerun()
+            with col_note:
+                st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
+                _note_lbl = "📝 Editar nota" if _note_text else "📝 Nota"
+                if st.button(
+                    _note_lbl,
+                    key=f"note_inv_{inv.id}",
+                    use_container_width=True,
+                    help="Agregar o editar la nota de este registro",
+                ):
+                    if editing_note:
+                        st.session_state.pop("edit_note_inv", None)
+                    else:
+                        st.session_state["edit_note_inv"] = inv.id
+                        st.session_state.pop("assign_proj_inv", None)
+                    st.rerun()
             with col_del:
                 st.markdown("<div style='height:.6rem'></div>", unsafe_allow_html=True)
                 if st.button(
@@ -602,6 +805,32 @@ else:
                     help=f"Eliminar inventario de {mat_name} en {wh_name}",
                 ):
                     st.session_state["confirm_del_inv"] = inv.id
+                    st.rerun()
+
+            # Panel de edición de nota
+            if editing_note:
+                _new_note = st.text_area(
+                    "Nota del registro",
+                    value=_note_text,
+                    key=f"note_text_{inv.id}",
+                    placeholder="Anota observaciones, recordatorios o detalles…",
+                    height=80,
+                    label_visibility="collapsed",
+                )
+                _nc1, _nc2 = st.columns(2, gap="small")
+                if _nc1.button(
+                    "Guardar nota", key=f"save_note_{inv.id}",
+                    type="primary", use_container_width=True,
+                ):
+                    update_inventory_note(db, inv.id, _new_note)
+                    st.session_state.pop("edit_note_inv", None)
+                    st.session_state["inv_add_msgs"] = ["Nota guardada."]
+                    st.rerun()
+                if _nc2.button(
+                    "Cancelar", key=f"cancel_note_{inv.id}",
+                    use_container_width=True,
+                ):
+                    st.session_state.pop("edit_note_inv", None)
                     st.rerun()
         else:
             st.markdown(
@@ -666,7 +895,13 @@ else:
         st.markdown("<div style='margin-bottom:.25rem'></div>", unsafe_allow_html=True)
 
     # ── Filtro de inventario ──────────────────────────────────────────────────
-    _fc1, _fc2 = st.columns([3, 5], gap="small")
+    _proj_names_present = sorted({
+        inv.budget_name for inv in own_inventory
+        if getattr(inv, "budget_name", None)
+    }, key=str.lower)
+    _proj_filter_opts = ["Todos los proyectos"] + _proj_names_present + ["Sin proyecto"]
+
+    _fc1, _fc2, _fc3 = st.columns([3, 3, 4], gap="small")
     with _fc1:
         _inv_search = st.text_input(
             "Buscar material",
@@ -675,23 +910,42 @@ else:
             label_visibility="collapsed",
         )
     with _fc2:
+        _inv_proj_sel = st.selectbox(
+            "Filtrar por proyecto",
+            _proj_filter_opts,
+            key="inv_proj_filter",
+            label_visibility="collapsed",
+        )
+    with _fc3:
         st.markdown(
             "<div style='padding-top:.45rem;font-size:.78rem;"
             "color:rgba(148,163,184,.45)'>🔍 Filtrar inventario actual</div>",
             unsafe_allow_html=True,
         )
 
+    _filtered_inv = own_inventory
     if _inv_search:
         _s = _inv_search.lower()
         _filtered_inv = [
-            inv for inv in own_inventory
+            inv for inv in _filtered_inv
             if _s in (inv.material.name  if inv.material  else "").lower()
             or _s in (inv.warehouse.name if inv.warehouse else "").lower()
         ]
-        if not _filtered_inv:
+    if _inv_proj_sel == "Sin proyecto":
+        _filtered_inv = [inv for inv in _filtered_inv if not getattr(inv, "budget_name", None)]
+    elif _inv_proj_sel != "Todos los proyectos":
+        _filtered_inv = [
+            inv for inv in _filtered_inv
+            if getattr(inv, "budget_name", None) == _inv_proj_sel
+        ]
+
+    if not _filtered_inv:
+        if _inv_search and _inv_proj_sel != "Todos los proyectos":
+            st.info(f"No hay registros que coincidan con «{_inv_search}» en el proyecto seleccionado.")
+        elif _inv_search:
             st.info(f"No se encontraron materiales que coincidan con «{_inv_search}».")
-    else:
-        _filtered_inv = own_inventory
+        elif _inv_proj_sel != "Todos los proyectos":
+            st.info(f"No hay inventario asignado al filtro de proyecto seleccionado.")
 
     # ── Paginación ────────────────────────────────────────────────────────────
     ITEMS_PER_PAGE = 10
@@ -862,7 +1116,7 @@ if deleted_items:
 """, unsafe_allow_html=True)
 
         if _action is None:
-            _btn_col_lost, _btn_col_ret, _btn_col_space = st.columns([1.5, 1.5, 5])
+            _btn_col_lost, _btn_col_ret, _btn_col_restore, _btn_col_space = st.columns([1.5, 1.5, 1.7, 4])
             if _btn_col_lost.button(
                 "Se perdió el material", key=f"lost_{_drec.id}", use_container_width=True
             ):
@@ -872,6 +1126,40 @@ if deleted_items:
                 "Se devolvió material", key=f"ret_{_drec.id}", use_container_width=True
             ):
                 st.session_state[_state_key_action] = "return_select"
+                st.rerun()
+            if _btn_col_restore.button(
+                "↩ Restaurar al inventario",
+                key=f"restore_{_drec.id}",
+                use_container_width=True,
+                help="Vuelve a la confirmación: devuelve el stock al inventario y cancela la eliminación.",
+            ):
+                st.session_state[_state_key_action] = "restore_confirm"
+                st.rerun()
+
+        elif _action == "restore_confirm":
+            st.markdown(
+                f"<div style='padding:.55rem 1rem;border-radius:10px;"
+                f"border:1px solid rgba(37,99,235,.32);background:rgba(37,99,235,.07);"
+                f"margin-bottom:.4rem'>"
+                f"<span style='color:#93c5fd;font-size:.82rem;font-weight:600'>"
+                f"¿Cancelar la eliminación y devolver <strong>{_drec.stock}</strong> unidad"
+                f"{'es' if _drec.stock != 1 else ''} de <strong>{_drec.material_name}</strong> "
+                f"al inventario? El registro quedará sin proyecto asignado.</span></div>",
+                unsafe_allow_html=True,
+            )
+            _r_ok, _r_cancel = st.columns(2)
+            if _r_ok.button("Confirmar restauración", key=f"restore_ok_{_drec.id}", type="primary", use_container_width=True):
+                if restore_deleted_inventory(db, _drec.id):
+                    st.success(
+                        f"Material **{_drec.material_name}** restaurado al inventario "
+                        f"({_drec.stock} unidades)."
+                    )
+                else:
+                    st.error("No se pudo restaurar el registro.")
+                del st.session_state[_state_key_action]
+                st.rerun()
+            if _r_cancel.button("Cancelar", key=f"restore_cancel_{_drec.id}", use_container_width=True):
+                del st.session_state[_state_key_action]
                 st.rerun()
 
         elif _action == "lost":
@@ -899,30 +1187,16 @@ if deleted_items:
                 st.rerun()
 
         elif _action == "return_select":
-            if _del_bud_map:
-                _ret_bud_label = st.selectbox(
-                    "Acreditar devolución al presupuesto",
-                    list(_del_bud_map.keys()),
-                    key=f"ret_bud_{_drec.id}",
-                )
-                _ret_bud_id = _del_bud_map[_ret_bud_label]
-            else:
-                st.caption("No hay presupuestos activos. Se marcará como devuelto sin acreditar presupuesto.")
-                _ret_bud_id = None
-
+            st.caption(
+                "El presupuesto del proyecto es fijo: al eliminar este registro su "
+                "costo bloqueado ya quedó liberado del consumo. La devolución sólo "
+                "actualiza el estado."
+            )
             _c_ok2, _c_cancel2 = st.columns(2)
             if _c_ok2.button("Confirmar devolución", key=f"ret_ok_{_drec.id}", type="primary", use_container_width=True):
                 resolve_deleted_inventory(db, _drec.id, "returned")
-                if _ret_bud_id is not None and _drec.total_value:
-                    credit_budget(db, _ret_bud_id, _drec.total_value, _drec.unit_price_dol * _drec.stock)
-                    _msg = (
-                        f"Material **{_drec.material_name}** devuelto. "
-                        f"Se acreditaron **{_val_str}** al presupuesto **{_ret_bud_label}**."
-                    )
-                else:
-                    _msg = f"Material **{_drec.material_name}** marcado como devuelto."
                 del st.session_state[_state_key_action]
-                st.success(_msg)
+                st.success(f"Material **{_drec.material_name}** marcado como devuelto.")
                 st.rerun()
             if _c_cancel2.button("Cancelar", key=f"ret_cancel_{_drec.id}", use_container_width=True):
                 del st.session_state[_state_key_action]

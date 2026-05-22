@@ -6,7 +6,8 @@ from models import (
 
     warehouse, material, inventory, requirement,
     dispatch, receipt, movement, user,
-    login_log, failed_login, session, budget, deleted_inventory
+    login_log, failed_login, session, budget, deleted_inventory,
+    budget_additional,
 )
 
 
@@ -74,6 +75,16 @@ def run_migrations():
             if "finished_at" not in cols:
                 dt_type = "DATETIME" if is_sqlite else "TIMESTAMP"
                 add_col(conn, "budgets", "finished_at", dt_type)
+            if "deactivated_at" not in cols:
+                dt_type = "DATETIME" if is_sqlite else "TIMESTAMP"
+                add_col(conn, "budgets", "deactivated_at", dt_type)
+            if "deactivation_reason" not in cols:
+                add_col(conn, "budgets", "deactivation_reason", "VARCHAR")
+            if "reactivation_date" not in cols:
+                dt_type = "DATETIME" if is_sqlite else "TIMESTAMP"
+                add_col(conn, "budgets", "reactivation_date", dt_type)
+            if "extension_history" not in cols:
+                add_col(conn, "budgets", "extension_history", "TEXT")
 
         # inventory table — per-budget tracking and freeze flag
         if "inventory" in tables:
@@ -85,6 +96,14 @@ def run_migrations():
             if "is_active" not in cols:
                 default_val = "1" if is_sqlite else "true"
                 add_col(conn, "inventory", "is_active", f"BOOLEAN NOT NULL DEFAULT {default_val}")
+            if "unlocked_qty" not in cols:
+                add_col(conn, "inventory", "unlocked_qty", "INTEGER NOT NULL DEFAULT 0")
+            if "locked_cost_soles" not in cols:
+                add_col(conn, "inventory", "locked_cost_soles", "FLOAT NOT NULL DEFAULT 0.0")
+            if "locked_cost_dolares" not in cols:
+                add_col(conn, "inventory", "locked_cost_dolares", "FLOAT NOT NULL DEFAULT 0.0")
+            if "note" not in cols:
+                add_col(conn, "inventory", "note", "TEXT")
 
         # requirements table — vínculo opcional a un proyecto/budget
         if "requirements" in tables:
@@ -94,8 +113,81 @@ def run_migrations():
             if "budget_name" not in cols:
                 add_col(conn, "requirements", "budget_name", "VARCHAR")
 
+        # movements — vínculo a proyecto/budget para KPIs por ámbito
+        if "movements" in tables:
+            cols = {c["name"] for c in inspector.get_columns("movements")}
+            if "budget_id" not in cols:
+                add_col(conn, "movements", "budget_id", "INTEGER")
+                print("  [INFO] Retropoblando movements.budget_id...")
+                # Dispatch movements → requirement.budget_id
+                conn.execute(text("""
+                    UPDATE movements
+                    SET budget_id = (
+                        SELECT r.budget_id FROM dispatches d
+                        JOIN requirements r ON r.id = d.requirement_id
+                        WHERE d.id = movements.reference_id
+                    )
+                    WHERE reference_type = 'dispatch' AND budget_id IS NULL
+                """))
+                # Receipt movements → receipt.dispatch_id → requirement.budget_id
+                conn.execute(text("""
+                    UPDATE movements
+                    SET budget_id = (
+                        SELECT r.budget_id FROM receipts rc
+                        JOIN dispatches d ON d.id = rc.dispatch_id
+                        JOIN requirements r ON r.id = d.requirement_id
+                        WHERE rc.id = movements.reference_id
+                    )
+                    WHERE reference_type = 'receipt' AND budget_id IS NULL
+                """))
+                # Manual/eliminado → si existe UNA sola inventory line para (wh, mat) con budget, úsala
+                conn.execute(text("""
+                    UPDATE movements
+                    SET budget_id = (
+                        SELECT i.budget_id FROM inventory i
+                        WHERE i.warehouse_id = movements.warehouse_id
+                          AND i.material_id  = movements.material_id
+                          AND i.budget_id IS NOT NULL
+                        LIMIT 1
+                    )
+                    WHERE reference_type IN ('manual','material_eliminado')
+                      AND budget_id IS NULL
+                      AND (
+                        SELECT COUNT(DISTINCT i2.budget_id) FROM inventory i2
+                        WHERE i2.warehouse_id = movements.warehouse_id
+                          AND i2.material_id  = movements.material_id
+                          AND i2.budget_id IS NOT NULL
+                      ) = 1
+                """))
+                print("  [OK] Retropoblado completado.")
+
+        # budget_additionals — confirmación de autorización + documentos
+        if "budget_additionals" in tables:
+            cols = {c["name"] for c in inspector.get_columns("budget_additionals")}
+            if "confirmed" not in cols:
+                default_val = "0" if is_sqlite else "false"
+                add_col(conn, "budget_additionals", "confirmed", f"BOOLEAN NOT NULL DEFAULT {default_val}")
+            if "confirmation_code" not in cols:
+                add_col(conn, "budget_additionals", "confirmation_code", "VARCHAR")
+            if "confirmed_at" not in cols:
+                dt_type = "DATETIME" if is_sqlite else "TIMESTAMP"
+                add_col(conn, "budget_additionals", "confirmed_at", dt_type)
+            if "documents" not in cols:
+                add_col(conn, "budget_additionals", "documents", "TEXT")
+
         # deleted_inventory — registros eliminados con resolución pendiente
-        # (tabla nueva — creada por Base.metadata.create_all; sin columnas extra que migrar)
+        if "deleted_inventory" in tables:
+            cols = {c["name"] for c in inspector.get_columns("deleted_inventory")}
+            if "budget_id" not in cols:
+                add_col(conn, "deleted_inventory", "budget_id", "INTEGER")
+            if "budget_name" not in cols:
+                add_col(conn, "deleted_inventory", "budget_name", "VARCHAR")
+            if "locked_cost_soles" not in cols:
+                add_col(conn, "deleted_inventory", "locked_cost_soles", "FLOAT NOT NULL DEFAULT 0.0")
+            if "locked_cost_dolares" not in cols:
+                add_col(conn, "deleted_inventory", "locked_cost_dolares", "FLOAT NOT NULL DEFAULT 0.0")
+            if "unlocked_qty" not in cols:
+                add_col(conn, "deleted_inventory", "unlocked_qty", "INTEGER NOT NULL DEFAULT 0")
 
         conn.commit()
     print("Migraciones manuales completadas.\n")

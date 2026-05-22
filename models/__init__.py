@@ -10,3 +10,4 @@ from .login_log import LoginLog
 from .failed_login import FailedLoginAttempt
 from .budget import Budget
 from .deleted_inventory import DeletedInventory
+from .budget_additional import BudgetAdditional

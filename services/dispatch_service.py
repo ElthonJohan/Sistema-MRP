@@ -133,6 +133,7 @@ def create_dispatch(db: Session, requirement_id, items, user_id=1):
             movement_type="OUT",
             reference_type="dispatch",
             reference_id=dispatch.id,
+            budget_id=req.budget_id,
             user_id=user_id,
         )
         db.add(movement)

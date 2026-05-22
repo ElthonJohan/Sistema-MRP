@@ -12,6 +12,8 @@ from services.material_service import (
     delete_material_code,
 )
 from services.budget_service import get_budgets
+from models.inventory import Inventory
+from models.warehouse import Warehouse
 from utils.auth import require_cliente, get_current_user_id
 from utils.navbar import render_navbar, render_sidebar_menu
 
@@ -149,6 +151,52 @@ label[data-testid="stWidgetLabel"] p { font-size: .80rem !important; font-weight
 .mat-field-val.empty { color: rgba(148,163,184,.40); font-style: italic; font-weight: 500; }
 .mat-field-val.price-s { color: #34d399; }
 .mat-field-val.price-d { color: #60a5fa; }
+
+/* ── Chips de proyectos usando el material ── */
+.mat-proj-row {
+    margin-top: .55rem;
+    padding-top: .5rem;
+    border-top: 1px dashed rgba(37,99,235,.18);
+    display: flex; flex-wrap: wrap; gap: .35rem;
+    align-items: center;
+}
+.mat-proj-lbl {
+    font-size: .60rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: rgba(148,163,184,.60);
+    margin-right: .25rem;
+}
+.mat-proj-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    padding: .15rem .55rem; border-radius: 20px;
+    font-size: .68rem; font-weight: 700;
+    background: rgba(5,150,105,.18); color: #6ee7b7;
+    border: 1px solid rgba(5,150,105,.30);
+    white-space: nowrap;
+}
+.mat-proj-chip.inactive {
+    background: rgba(148,163,184,.12); color: #94a3b8;
+    border-color: rgba(148,163,184,.28);
+}
+.mat-proj-qty {
+    font-size: .62rem; font-weight: 800;
+    background: rgba(255,255,255,.10);
+    border-radius: 10px; padding: 0 .35rem;
+}
+.mat-noproj-chip {
+    display: inline-flex; align-items: center;
+    padding: .12rem .5rem; border-radius: 20px;
+    font-size: .62rem; font-weight: 600;
+    background: rgba(148,163,184,.08); color: rgba(148,163,184,.55);
+    border: 1px dashed rgba(148,163,184,.25);
+}
+
+/* ── Paginación ── */
+.mat-pag-info {
+    text-align: center; font-size: .80rem;
+    color: rgba(148,163,184,.65); font-weight: 600;
+    padding: .3rem 0;
+}
 
 /* ── Alineación vertical de botones con tarjeta de material ── */
 [data-testid="stHorizontalBlock"]:has(.mat-info-card) {
@@ -296,13 +344,18 @@ with _col_budgets.popover("📊 Presupuestos", use_container_width=True):
     if not _active_buds:
         st.info("No hay presupuestos activos registrados.")
     else:
+        from services.inventory_service import get_budget_available as _get_avail
         for _b in _active_buds:
+            _av_s, _av_d = _get_avail(db, _b.id)
             st.markdown(f"""
 <div style="padding:.55rem .8rem;border-radius:10px;border:1px solid rgba(5,150,105,.25);
             background:rgba(5,150,105,.07);margin-bottom:.45rem">
   <div style="font-weight:800;font-size:.88rem;color:#6ee7b7">{_b.name}</div>
-  <div style="font-size:.75rem;color:rgba(255,255,255,.55);margin-top:.18rem">
-    S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  <div style="font-size:.72rem;color:rgba(255,255,255,.42);margin-top:.16rem">
+    Total: S/ {_b.budget_soles:,.2f} &nbsp;·&nbsp; $ {_b.budget_dolares:,.2f}
+  </div>
+  <div style="font-size:.78rem;color:#34d399;margin-top:.10rem;font-weight:700">
+    Disponible: S/ {_av_s:,.2f} &nbsp;·&nbsp; $ {_av_d:,.2f}
   </div>
 </div>""", unsafe_allow_html=True)
 with _col_help.popover("Instrucciones", use_container_width=True):
@@ -576,10 +629,102 @@ st.markdown(f'<div class="sec-title">Catálogo de Materiales ({len(materials)})<
 if st.session_state.get("mat_op_msg"):
     st.success(st.session_state.pop("mat_op_msg"))
 
+# Mapeo material_id -> proyectos donde se usa (almacenes principales del cliente)
+_principal_wh_ids = {
+    w.id for w in db.query(Warehouse).filter(
+        Warehouse.owner_id == owner_id,
+        Warehouse.type == "principal",
+    ).all()
+}
+_active_bud_names = {b.name for b in get_budgets(db) if b.is_active}
+
+_mat_proj_map: dict = {}
+if _principal_wh_ids:
+    _inv_rows = (
+        db.query(Inventory)
+        .filter(
+            Inventory.warehouse_id.in_(_principal_wh_ids),
+            Inventory.is_active == True,
+            Inventory.budget_id.isnot(None),
+        )
+        .all()
+    )
+    for _inv in _inv_rows:
+        _key = _inv.material_id
+        _entry = _mat_proj_map.setdefault(_key, {})
+        _name  = _inv.budget_name or "—"
+        _slot  = _entry.setdefault(_name, {"stock": 0, "active": _name in _active_bud_names})
+        _slot["stock"] += int(_inv.stock or 0)
+
+_all_proj_in_inv = sorted({n for sub in _mat_proj_map.values() for n in sub.keys()}, key=str.lower)
+
 if not materials:
     st.info("No hay materiales registrados. Crea el primero con el formulario de arriba.")
 else:
-    for m in materials:
+    # ── Filtros del catálogo ──────────────────────────────────────────────────
+    _f1, _f2, _f3 = st.columns([3, 3, 2], gap="small")
+    with _f1:
+        _mat_search = st.text_input(
+            "Buscar material",
+            placeholder="Filtrar por código, nombre, unidad o descripción...",
+            key="mat_search_text",
+            label_visibility="collapsed",
+        )
+    _proj_filter_opts = ["Todos los proyectos"] + _all_proj_in_inv + ["Sin proyecto asignado"]
+    with _f2:
+        _mat_proj_filter = st.selectbox(
+            "Filtrar por proyecto",
+            _proj_filter_opts,
+            key="mat_proj_filter",
+            label_visibility="collapsed",
+        )
+    with _f3:
+        if st.button("Limpiar filtros", key="clear_mat_filters", use_container_width=True):
+            st.session_state["mat_search_text"] = ""
+            st.session_state["mat_proj_filter"] = "Todos los proyectos"
+            st.session_state["mat_page"] = 0
+            st.rerun()
+
+    # ── Aplicar filtros ───────────────────────────────────────────────────────
+    _filtered_materials = materials
+    if _mat_search:
+        _s = _mat_search.lower()
+        _filtered_materials = [
+            m for m in _filtered_materials
+            if _s in (m.code or "").lower()
+            or _s in (m.name or "").lower()
+            or _s in (m.unit or "").lower()
+            or _s in (m.description or "").lower()
+        ]
+    if _mat_proj_filter == "Sin proyecto asignado":
+        _filtered_materials = [
+            m for m in _filtered_materials if not _mat_proj_map.get(m.id)
+        ]
+    elif _mat_proj_filter != "Todos los proyectos":
+        _filtered_materials = [
+            m for m in _filtered_materials
+            if _mat_proj_filter in (_mat_proj_map.get(m.id) or {})
+        ]
+
+    if not _filtered_materials:
+        st.info("No se encontraron materiales con los filtros aplicados.")
+        db.close()
+        st.stop()
+
+    # ── Paginación (20 tarjetas por página) ───────────────────────────────────
+    _MAT_PER_PAGE = 20
+    _total_mat    = len(_filtered_materials)
+    _total_pages  = max(1, (_total_mat + _MAT_PER_PAGE - 1) // _MAT_PER_PAGE)
+    _page         = int(st.session_state.get("mat_page", 0))
+    _page         = min(_page, _total_pages - 1)
+    _page_items   = _filtered_materials[_page * _MAT_PER_PAGE:(_page + 1) * _MAT_PER_PAGE]
+
+    st.caption(
+        f"Mostrando {len(_page_items)} de {_total_mat} materiales"
+        + (f" (página {_page + 1} de {_total_pages})" if _total_pages > 1 else "")
+    )
+
+    for m in _page_items:
         col_card, col_edit, col_del = st.columns([9, 1, 1], gap="small", vertical_alignment="center")
 
         with col_card:
@@ -593,6 +738,30 @@ else:
             price_d_html = f"$ {price_d:,.2f}" if price_d > 0 else "—"
             price_s_cls  = "price-s" if price_s > 0 else "empty"
             price_d_cls  = "price-d" if price_d > 0 else "empty"
+
+            _proj_uses = _mat_proj_map.get(m.id) or {}
+            if _proj_uses:
+                _chips_html = "".join(
+                    f'<span class="mat-proj-chip{"" if data["active"] else " inactive"}" '
+                    f'title="Proyecto {"activo" if data["active"] else "desactivado"}">'
+                    f'📂 {pname} '
+                    f'<span class="mat-proj-qty">{data["stock"]}</span>'
+                    f'</span>'
+                    for pname, data in sorted(_proj_uses.items(), key=lambda kv: kv[0].lower())
+                )
+                proj_row_html = (
+                    f'<div class="mat-proj-row">'
+                    f'<span class="mat-proj-lbl">En proyectos:</span>'
+                    f'{_chips_html}'
+                    f'</div>'
+                )
+            else:
+                proj_row_html = (
+                    '<div class="mat-proj-row">'
+                    '<span class="mat-proj-lbl">En proyectos:</span>'
+                    '<span class="mat-noproj-chip">Sin uso registrado</span>'
+                    '</div>'
+                )
 
             card_html = (
                 '<div class="mat-info-card">'
@@ -610,6 +779,7 @@ else:
                     f'<div class="mat-field"><span class="mat-field-lbl">Precio $</span>'
                     f'<span class="mat-field-val {price_d_cls}">{price_d_html}</span></div>'
                   '</div>'
+                  f'{proj_row_html}'
                 '</div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
@@ -689,5 +859,22 @@ else:
             if c_no.button("Cancelar", key=f"no_del_mat_{m.id}", use_container_width=True):
                 st.session_state.pop("confirm_del_mat", None)
                 st.rerun()
+
+    # ── Controles de paginación ───────────────────────────────────────────────
+    if _total_pages > 1:
+        _pp_prev, _pp_info, _pp_next = st.columns([1, 3, 1])
+        _pp_info.markdown(
+            f"<div class='mat-pag-info'>Página {_page + 1} de {_total_pages} "
+            f"— {_total_mat} materiales</div>",
+            unsafe_allow_html=True,
+        )
+        if _pp_prev.button("← Anterior", key="mat_prev",
+                           disabled=(_page == 0), use_container_width=True):
+            st.session_state["mat_page"] = _page - 1
+            st.rerun()
+        if _pp_next.button("Siguiente →", key="mat_next",
+                           disabled=(_page == _total_pages - 1), use_container_width=True):
+            st.session_state["mat_page"] = _page + 1
+            st.rerun()
 
 db.close()

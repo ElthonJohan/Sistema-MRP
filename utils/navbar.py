@@ -11,6 +11,7 @@ _PAGE_KEYS = {
     "pages/inventory_obra.py":  "menu_inventory_obra",
     "pages/access_logs.py":     "menu_access_logs",
     "pages/presupuestos.py":    "menu_presupuestos",
+    "pages/adicional.py":       "menu_adicional",
 }
 
 def _apply_theme():
@@ -419,6 +420,13 @@ def render_sidebar_menu():
     [data-testid="stSidebar"] [data-testid="stBaseButton-primary"][data-nav="presupuestos"]::before {
         opacity: 1;
     }
+    [data-testid="stSidebar"] button[data-nav="adicional"]::before {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='16'/%3E%3Cline x1='8' y1='12' x2='16' y2='12'/%3E%3C/svg%3E");
+        opacity: .75;
+    }
+    [data-testid="stSidebar"] [data-testid="stBaseButton-primary"][data-nav="adicional"]::before {
+        opacity: 1;
+    }
     [data-testid="stSidebar"] button[data-nav="access_logs"]::before {
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fbbf24' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z'/%3E%3Cpath d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z'/%3E%3C/svg%3E");
         opacity: .75;
@@ -534,8 +542,7 @@ def render_sidebar_menu():
 >>>>>>> 41312df22d73484ea964d8cdec29a4627ed2e4e6
 =======
         'Panel de Usuarios':'admin','← Salir de vista':'exit_imp',
-        'Presupuestos':'presupuestos'
->>>>>>> c37b9497c2629ae31ffbee0f95a87afbff431497
+        'Presupuestos':'presupuestos','Adicional':'adicional'
       };
       function tag(){
         document.querySelectorAll('[data-testid="stSidebar"] button').forEach(function(b){
@@ -630,6 +637,7 @@ def render_sidebar_menu():
         st.markdown('<span class="sb-section-gap"></span>', unsafe_allow_html=True)
         st.markdown('<p class="sb-section">Finanzas</p>', unsafe_allow_html=True)
         _btn("Presupuestos",      "pages/presupuestos.py",  "menu_presupuestos")
+        _btn("Adicional",         "pages/adicional.py",     "menu_adicional")
 
         st.markdown('<span class="sb-section-gap"></span>', unsafe_allow_html=True)
         st.markdown('<p class="sb-section">Monitoreo</p>', unsafe_allow_html=True)

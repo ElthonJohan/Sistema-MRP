@@ -17,8 +17,10 @@ class Movement(Base):
     reference_type = Column(String)
     reference_id = Column(Integer)
 
+    budget_id = Column(Integer, ForeignKey("budgets.id"), nullable=True, index=True)
+
     user_id = Column(Integer)
     timestamp = Column(DateTime, default=datetime.utcnow)
-    
+
     warehouse = relationship("Warehouse", back_populates="movements")
     material = relationship("Material", back_populates="movements")
